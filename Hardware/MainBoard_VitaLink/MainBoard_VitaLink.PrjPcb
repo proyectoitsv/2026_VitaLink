@@ -67,7 +67,7 @@ GenerateClassCluster=0
 DocumentUniqueId=BPXPCJWT
 
 [Document2]
-DocumentPath=Library\XIAO-RP2040.IntLib
+DocumentPath=Library\XIAO-RP2040-3DModel.STEP
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -84,7 +84,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document3]
-DocumentPath=Library\XIAO-RP2040-3DModel.STEP
+DocumentPath=Library\XIAO-RP2040.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
