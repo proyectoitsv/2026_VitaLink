@@ -84,6 +84,23 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document3]
+DocumentPath=Library\XIAO-RP2040\MODULE_102010428.PcbLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=0
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=TLPENFAH
+
+[Document4]
 DocumentPath=Library\XIAO-RP2040.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -100,7 +117,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=NIDQCEFV
 
-[Document4]
+[Document5]
 DocumentPath=Library\MPU6050-GY521.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -117,7 +134,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=AVNDBQYD
 
-[Document5]
+[Document6]
 DocumentPath=Library\MPU6050-GY521.PcbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -134,7 +151,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=UODNJFMX
 
-[Document6]
+[Document7]
 DocumentPath=Library\MAX30102.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -151,7 +168,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=GOPURGSR
 
-[Document7]
+[Document8]
 DocumentPath=Library\MAX30102.PcbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -168,7 +185,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=SDUVUWAV
 
-[Document8]
+[Document9]
 DocumentPath=PCB_VitaLink.PcbDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -184,6 +201,27 @@ ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=XWFJKMAU
+
+[Document10]
+DocumentPath=Library\XIAO-RP2040\Project Outputs for XIAO-RP2040\XIAO-RP2040.IntLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=0
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=
+
+[GeneratedDocument1]
+DocumentPath=Project Outputs for MainBoard_VitaLink\Design Rule Check - PCB_VitaLink.html
+DItemRevisionGUID=
 
 [Configuration1]
 Name=Sources

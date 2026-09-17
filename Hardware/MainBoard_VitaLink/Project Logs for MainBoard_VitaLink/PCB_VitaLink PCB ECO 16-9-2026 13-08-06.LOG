@@ -1,0 +1,7 @@
+Added Component: Designator=U2(PCBComponent_1)
+Added Pin To Net: NetName=+3.3 Pin=U2-1
+Added Pin To Net: NetName=GND Pin=U2-2
+Added Pin To Net: NetName=D5 Pin=U2-3
+Added Pin To Net: NetName=D4 Pin=U2-4
+Added Pin To Net: NetName=D0 Pin=U2-8
+Added Member To Class: ClassName=Esquematico_VitaLink Member=Component U2 MPU6050

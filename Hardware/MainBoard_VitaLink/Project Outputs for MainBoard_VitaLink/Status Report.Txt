@@ -1,0 +1,12 @@
+Output: NC Drill Files
+Type  : NC Drill
+From  : Project [MainBoard_VitaLink.PrjPcb]
+   Generated File[PCB_VitaLink.TXT]
+   Generated File[PCB_VitaLink.LDP]
+   Generated File[PCB_VitaLink.DRR]
+
+
+Files Generated   : 3
+Documents Printed : 0
+
+Finished Output Generation At 09:35:26 On 17/9/2026

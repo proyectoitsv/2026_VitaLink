@@ -1,0 +1,518 @@
+<html>
+<head>
+<META http-equiv="Content-Type" content="text/html">
+<style type="text/css">
+		h1, h2, h3, h4, h5, h6 {
+			font-family : segoe ui;
+			color : black;
+			background-color : #EDE7D9;
+			padding: 0.3em;
+		}
+
+		h1 {
+			font-size: 1.2em;
+		}		
+
+		h2 {
+			font-size: 1.2em;
+		}
+
+		body {
+			font-family : segoe ui;
+		}
+
+		td, th {
+			padding: 0.5em;
+			text-align : left;
+			width: 10em;
+		}
+		th {
+			background-color : #EEEEEE;
+
+		}
+		th.column1, td.column1 {
+			text-align: left;
+			width : auto;
+		}
+		table {
+			width : 100%;
+			font-size: 0.9em;
+		}
+
+		.DRC_summary_header {
+			padding-bottom : 0.1em;
+			border : 0px solid black;
+			width: 100%;
+			align: left;
+		}
+
+		.DRC_summary_header_col1,
+		.DRC_summary_header_col2, 
+		.DRC_summary_header_col3 {
+			color : black;
+			font-size:100%;
+			padding : 0em;
+			padding-top : 0.2em;
+			padding-bottom 0.2em;
+			border : 0px solid black;
+			vertical-align: top;
+			text-align: left;
+		}
+
+		.DRC_summary_header_col1 {
+			font-weight: bold;
+			width: 9em;
+		}
+
+		.DRC_summary_header_col2 {
+			width: 0.1em;
+		
+		}
+
+		.DRC_summary_header_col3 {
+			width : auto;
+		}
+
+		.header_holder {
+		    Width = 100%;
+		    border = 0px solid green;
+		    padding = 0;
+		}
+
+
+		.front_matter, .front_matter_column1, .front_matter_column2, .front_matter_column3
+		{
+			left : 0;
+			top : 0;
+			padding: 0em;
+			padding-top : 0.1em;
+			border : 0px solid black;
+			width : 100%;
+			vertical-align: top;
+			text-align: left;
+		}
+
+		.front_matter_column1 {
+			width : 8em;
+			font-weight: bold;
+		}
+
+		.front_matter_column2 {
+			width: 0.1em;
+		}
+
+		.front_matter_column3 {
+			width : auto;
+		}
+
+		.total_column1, .total_column {
+			font-weight : bold;
+		}
+		.total_column1 {
+			text-align : left;
+		}
+		.warning, .error {
+			color : red;
+			font-weight : bold;
+		}
+		tr.onmouseout_odd {
+			background-color : #white;
+		}
+		tr.onmouseout_even { 
+			background-color : #FAFAFA;
+		}
+		tr.onmouseover_odd, tr.onmouseover_even { 
+			background-color : #EEEEEE;
+		} 
+		a:link, a:visited, .q a:link,.q a:active,.q {
+			color: #21489e; 
+		}
+		a:link.callback, a:visited.callback { 
+			color: #21489e;
+		}
+		a:link.customize, a:visited.customize {
+			color: #C0C0C0;
+			position: absolute; 
+			right: 10px;
+		}	
+		p.contents_level1 {
+			font-weight : bold;
+			font-size : 110%;
+			margin : 0.5em;
+		}
+		p.contents_level2 {
+			position : relative;
+			left : 20px;
+			margin : 0.5em;
+		}
+	</style><script type="text/javascript">
+		function coordToMils(coord) {
+			var number = coord / 10000;
+			
+			if (number != number.toFixed(3))
+				number = number.toFixed(3);
+
+			return number + 'mil'
+		}
+
+		function coordToMM(coord) {
+			var number = 0.0254 * coord / 10000;
+			
+			if (number != number.toFixed(4))
+				number = number.toFixed(4);
+			
+			return number + 'mm'
+		}
+	
+		function convertCoord(coordNode, units) {
+			for (var i = 0; i < coordNode.childNodes.length; i++) {
+				coordNode.removeChild(coordNode.childNodes[i]);
+			}
+
+			var coord = coordNode.getAttribute('value');
+			if (coord != null) {
+				if (units == 'mm') {
+					textNode = document.createTextNode(coordToMM(coord));
+					coordNode.appendChild(textNode);
+				} else if (units == 'mil') {
+					textNode = document.createTextNode(coordToMils(coord));		
+					coordNode.appendChild(textNode);	
+				}
+			}
+		}
+	
+		function convertUnits(unitNode, units) {
+			for (var i = 0; i < unitNode.childNodes.length; i++) {
+				unitNode.removeChild(unitNode.childNodes[i]);		
+			}
+		
+			textNode = document.createTextNode(units); 
+			unitNode.appendChild(textNode);
+		}
+	
+		function changeUnits(radio_input, units) {
+			if (radio_input.checked) {
+			
+				var elements = document.getElementsByName('coordinate');
+				if (elements) {
+					for (var i = 0; i < elements.length; i++) {
+						convertCoord(elements[i], units);
+					}
+				}
+	
+				var elements = document.getElementsByName('units');
+				if (elements) {
+					for (var i = 0; i < elements.length; i++) {
+						convertUnits(elements[i], units);
+					}
+				}
+			}
+		}
+	</script><title>Design Rule Verification Report</title>
+</head>
+<body onload=""><img ALT="Altium" src="
+			file://C:\Users\Public\Documents\Altium\AD26\Templates\AD_logo.png
+		"><h1>Design Rule Verification Report</h1>
+<table class="header_holder">
+<td class="column1">
+<table class="front_matter">
+<tr class="front_matter">
+<td class="front_matter_column1">Date:</td>
+<td class="front_matter_column2"></td>
+<td class="front_matter_column3">16/9/2026</td>
+</tr>
+<tr class="front_matter">
+<td class="front_matter_column1">Time:</td>
+<td class="front_matter_column2"></td>
+<td class="front_matter_column3">13:52:41</td>
+</tr>
+<tr class="front_matter">
+<td class="front_matter_column1">Elapsed Time:</td>
+<td class="front_matter_column2"></td>
+<td class="front_matter_column3">00:00:00</td>
+</tr>
+<tr class="front_matter">
+<td class="front_matter_column1">Filename:</td>
+<td class="front_matter_column2"></td>
+<td class="front_matter_column3"><a href="file:///C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc" class="file"><acronym title="C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc">C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc</acronym></a></td>
+</tr>
+</table>
+</td>
+<td class="column2">
+<table class="DRC_summary_header">
+<tr>
+<td class="DRC_summary_header_col1">Warnings:</td>
+<td class="DRC_summary_header_col2"></td>
+<td class="DRC_summary_header_col3">0</td></tr>
+<tr>
+<td class="DRC_summary_header_col1">Rule Violations:</td>
+<td class="DRC_summary_header_col2"></td>
+<td class="DRC_summary_header_col3" style="color : red">58</td></tr>
+</table>
+</td>
+</table><a name="IDLG2DWMKWY45JGIAVTE12FYMGNAVRQ0FCOSHJOPFT5HF35IZSBC"><h2>Summary</h2></a><table>
+<tr>
+<th class="column1">Warnings</th>
+<th class="column2">Count</th>
+</tr>
+<tr>
+<td style="font-weight : bold; text-align : right" class="column1">Total</td>
+<td style="font-weight : bold" class="column2">0</td>
+</tr>
+</table><br><table>
+<tr>
+<th class="column1">Rule Violations</th>
+<th class="column2">Count</th>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDNWWQPI1NYW2VKI1Z2JPF0VEOIE25KQZW4BHYOAO3RL4GS44I44YB">Clearance Constraint (Gap=0.254mm) (All),(All)</a></td>
+<td class="column2">2</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#IDZB0LQDAHO4NTODG0HV4EFMQTYHXRK3SWCAKBLFQ0D5B25RKYUTC">Short-Circuit Constraint (Allowed=No) (All),(All)</a></td>
+<td class="column2">2</td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDOHKELV115JYWHKFWA3J2WAW53G1LORBPVFUJDFHRX20MSHGIO4CI">Un-Routed Net Constraint ( (Disabled)(All) )</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#IDBEBMZJ2J01PGNB5XTS4G3PRJ3POV0VQZAZWUEYDMPPWJWW54UM3F">Modified Polygon (Allow modified: No), (Allow shelved: No)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDQ02QQAAOHRZPOYQNIE1DTN2PVESQZKSXL3KET24HKYDG3MHHMPN">Width Constraint (Min=0.5mm) (Max=0.5mm) (Preferred=0.5mm) (All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#IDSM2XFSBGYR2GDBKEPOIGGTNK3MOZ0XHU0050JOLM4IVTRN3MJDSI">Routing Topology Rule(Topology=Shortest) (All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDZU23035WU1FXKOB1OO0UY04GONA5RV3UVRPZW5K0LRYZNLVGZPQJ">Power Plane Connect Rule(Relief Connect )(Expansion=0.508mm) (Conductor Width=0.254mm) (Air Gap=0.254mm) (Entries=4) (All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#IDODBFMRTLGQ5LK5YSZ2DPPKPFLL3K0JXCSTNGDY3234AN1JO3NFO">Hole Size Constraint (Min=0.025mm) (Max=2.54mm) (All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDDZFY5GYYCGN0J04VR5XMIUTF2N4FCKQ1TVNHYRKYQVODE24MXPXC">Hole To Hole Clearance (Gap=0.254mm) (All),(All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#IDVSGCUVUZDTD3K5FNAUAOGPW33C4A2MQ5HFBTZ1HISNMUYXPLGK2H">Minimum Solder Mask Sliver (Gap=0.254mm) (All),(All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDQ2A2UOTANDQ3BUM5JQAUG0WFIF1F1LWQNS32P3EZZ0C5YRLPPMVL">Silk To Solder Mask (Clearance=0.254mm) (IsPad),(All)</a></td>
+<td class="column2">49</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#IDWA3BIM3XN0VLHV5PKOG2BNI2WKBQWV1LECVCMUPPZ20IZ3QC5MKJ">Silk to Silk (Clearance=0.254mm) (All),(All)</a></td>
+<td class="column2">5</td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="#IDLRWI2KLQG3USETDAHFASVXEPXEEBRJEXVIWOZYOQZKUBGI3U3JC">Net Antennae (Tolerance=0mm) (All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="#ID5CGDWSQETRORKFKMTUXH3MXW5KTLI2N1XHGPZFVYNQBZPAKAU4I">Height Constraint (Min=0mm) (Max=25.4mm) (Prefered=12.7mm) (All)</a></td>
+<td class="column2">0</td>
+</tr>
+<tr>
+<td style="font-weight : bold; text-align : right" class="column1">Total</td>
+<td style="font-weight : bold" class="column2">58</td>
+</tr>
+</table><br><a name="IDNWWQPI1NYW2VKI1Z2JPF0VEOIE25KQZW4BHYOAO3RL4GS44I44YB"><table>
+<tr>
+<th style="text-align : left" colspan="1" class="rule">Clearance Constraint (Gap=0.254mm) (All),(All)</th>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6480.537mil|Location2.X=6488.203mil|Location1.Y=3936.639mil|Location2.Y=3944.305mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6480.537mil|Location2.X=6488.203mil|Location1.Y=3936.639mil|Location2.Y=3944.305mil|Absolute=True">Clearance Constraint: (Collision &lt; 0.254mm) Between Board Cutout (Multi-Layer)Region (0 hole(s)) Multi-Layer And Pad U1-15(163.703mm,100.838mm) on Top Layer </acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6480.537mil|Location2.X=6488.203mil|Location1.Y=3836.639mil|Location2.Y=3844.305mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6480.537mil|Location2.X=6488.203mil|Location1.Y=3836.639mil|Location2.Y=3844.305mil|Absolute=True">Clearance Constraint: (Collision &lt; 0.254mm) Between Board Cutout (Multi-Layer)Region (0 hole(s)) Multi-Layer And Pad U1-16(163.703mm,98.298mm) on Top Layer </acronym></a><br></td>
+</tr>
+</table></a><hr color="#EEEEEE"><a href="#top" style="font-size: 0.9em">Back to top</a><br><br><a name="IDZB0LQDAHO4NTODG0HV4EFMQTYHXRK3SWCAKBLFQ0D5B25RKYUTC"><table>
+<tr>
+<th style="text-align : left" colspan="1" class="rule">Short-Circuit Constraint (Allowed=No) (All),(All)</th>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6394.287mil|Location2.X=6495.713mil|Location1.Y=3919.287mil|Location2.Y=4020.712mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6394.287mil|Location2.X=6495.713mil|Location1.Y=3919.287mil|Location2.Y=4020.712mil|Absolute=True">Short-Circuit Constraint: Between Board Cutout (Multi-Layer)Region (0 hole(s)) Multi-Layer And Pad U1-15(163.703mm,100.838mm) on Top Layer Location : [X = 163.703mm][Y = 100.838mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6394.287mil|Location2.X=6495.713mil|Location1.Y=3819.287mil|Location2.Y=3920.712mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6394.287mil|Location2.X=6495.713mil|Location1.Y=3819.287mil|Location2.Y=3920.712mil|Absolute=True">Short-Circuit Constraint: Between Board Cutout (Multi-Layer)Region (0 hole(s)) Multi-Layer And Pad U1-16(163.703mm,98.298mm) on Top Layer Location : [X = 163.703mm][Y = 98.298mm]</acronym></a><br></td>
+</tr>
+</table></a><hr color="#EEEEEE"><a href="#top" style="font-size: 0.9em">Back to top</a><br><br><a name="IDQ2A2UOTANDQ3BUM5JQAUG0WFIF1F1LWQNS32P3EZZ0C5YRLPPMVL"><table>
+<tr>
+<th style="text-align : left" colspan="1" class="rule">Silk To Solder Mask (Clearance=0.254mm) (IsPad),(All)</th>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5454.376mil|Location2.X=5465.626mil|Location1.Y=3539.415mil|Location2.Y=3550.665mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5454.376mil|Location2.X=5465.626mil|Location1.Y=3539.415mil|Location2.Y=3550.665mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.05mm &lt; 0.254mm) Between Arc (138.684mm,90.319mm) on Top Overlay And Pad J1-1(138.684mm,88.519mm) on Top Layer [Top Overlay] to [Top Solder] clearance [0.05mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5759.375mil|Location2.X=5770.625mil|Location1.Y=3544.414mil|Location2.Y=3555.664mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5759.375mil|Location2.X=5770.625mil|Location1.Y=3544.414mil|Location2.Y=3555.664mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.05mm &lt; 0.254mm) Between Arc (146.431mm,90.446mm) on Top Overlay And Pad J4-1(146.431mm,88.646mm) on Top Layer [Top Overlay] to [Top Solder] clearance [0.05mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6169.336mil|Location2.X=6180.586mil|Location1.Y=3869.375mil|Location2.Y=3880.625mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6169.336mil|Location2.X=6180.586mil|Location1.Y=3869.375mil|Location2.Y=3880.625mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.05mm &lt; 0.254mm) Between Arc (156.569mm,98.425mm) on Bottom Overlay And Pad J5-1(158.369mm,98.425mm) on Bottom Layer [Bottom Overlay] to [Bottom Solder] clearance [0.05mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6209.376mil|Location2.X=6220.626mil|Location1.Y=4274.336mil|Location2.Y=4285.586mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6209.376mil|Location2.X=6220.626mil|Location1.Y=4274.336mil|Location2.Y=4285.586mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.05mm &lt; 0.254mm) Between Arc (157.861mm,108.436mm) on Bottom Overlay And Pad J3-1(157.861mm,110.236mm) on Bottom Layer [Bottom Overlay] to [Bottom Solder] clearance [0.05mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6284.375mil|Location2.X=6295.625mil|Location1.Y=3454.542mil|Location2.Y=3465.792mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6284.375mil|Location2.X=6295.625mil|Location1.Y=3454.542mil|Location2.Y=3465.792mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.05mm &lt; 0.254mm) Between Arc (159.766mm,88.163mm) on Top Overlay And Pad J2-1(159.766mm,86.363mm) on Top Layer [Top Overlay] to [Top Solder] clearance [0.05mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.189mil|Location2.X=5432.855mil|Location1.Y=3429.199mil|Location2.Y=3436.866mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.189mil|Location2.X=5432.855mil|Location1.Y=3429.199mil|Location2.Y=3436.866mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J1-1(138.684mm,88.519mm) on Top Layer And Track (134.624mm,87.199mm)(140.204mm,87.199mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5419.017mil|Location2.X=5426.684mil|Location1.Y=3533.135mil|Location2.Y=3540.802mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5419.017mil|Location2.X=5426.684mil|Location1.Y=3533.135mil|Location2.Y=3540.802mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J1-1(138.684mm,88.519mm) on Top Layer And Track (134.624mm,89.839mm)(140.204mm,89.839mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5325.189mil|Location2.X=5332.855mil|Location1.Y=3429.199mil|Location2.Y=3436.866mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5325.189mil|Location2.X=5332.855mil|Location1.Y=3429.199mil|Location2.Y=3436.866mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J1-2(136.144mm,88.519mm) on Top Layer And Track (134.624mm,87.199mm)(140.204mm,87.199mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5319.017mil|Location2.X=5326.684mil|Location1.Y=3533.135mil|Location2.Y=3540.802mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5319.017mil|Location2.X=5326.684mil|Location1.Y=3533.135mil|Location2.Y=3540.802mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J1-2(136.144mm,88.519mm) on Top Layer And Track (134.624mm,89.839mm)(140.204mm,89.839mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6255.188mil|Location2.X=6262.855mil|Location1.Y=3344.327mil|Location2.Y=3351.993mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6255.188mil|Location2.X=6262.855mil|Location1.Y=3344.327mil|Location2.Y=3351.993mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J2-1(159.766mm,86.363mm) on Top Layer And Track (155.706mm,85.043mm)(161.286mm,85.043mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6249.017mil|Location2.X=6256.683mil|Location1.Y=3448.263mil|Location2.Y=3455.929mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6249.017mil|Location2.X=6256.683mil|Location1.Y=3448.263mil|Location2.Y=3455.929mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J2-1(159.766mm,86.363mm) on Top Layer And Track (155.706mm,87.683mm)(161.286mm,87.683mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6155.188mil|Location2.X=6162.855mil|Location1.Y=3344.327mil|Location2.Y=3351.993mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6155.188mil|Location2.X=6162.855mil|Location1.Y=3344.327mil|Location2.Y=3351.993mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J2-2(157.226mm,86.363mm) on Top Layer And Track (155.706mm,85.043mm)(161.286mm,85.043mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6149.017mil|Location2.X=6156.683mil|Location1.Y=3448.263mil|Location2.Y=3455.929mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6149.017mil|Location2.X=6156.683mil|Location1.Y=3448.263mil|Location2.Y=3455.929mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J2-2(157.226mm,86.363mm) on Top Layer And Track (155.706mm,87.683mm)(161.286mm,87.683mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6180.189mil|Location2.X=6187.855mil|Location1.Y=4284.199mil|Location2.Y=4291.865mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6180.189mil|Location2.X=6187.855mil|Location1.Y=4284.199mil|Location2.Y=4291.865mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J3-1(157.861mm,110.236mm) on Bottom Layer And Track (153.801mm,108.916mm)(159.381mm,108.916mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6174.017mil|Location2.X=6181.684mil|Location1.Y=4388.135mil|Location2.Y=4395.801mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6174.017mil|Location2.X=6181.684mil|Location1.Y=4388.135mil|Location2.Y=4395.801mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J3-1(157.861mm,110.236mm) on Bottom Layer And Track (153.801mm,111.556mm)(159.381mm,111.556mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6080.189mil|Location2.X=6087.855mil|Location1.Y=4284.199mil|Location2.Y=4291.865mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6080.189mil|Location2.X=6087.855mil|Location1.Y=4284.199mil|Location2.Y=4291.865mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J3-2(155.321mm,110.236mm) on Bottom Layer And Track (153.801mm,108.916mm)(159.381mm,108.916mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6074.017mil|Location2.X=6081.684mil|Location1.Y=4388.135mil|Location2.Y=4395.801mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6074.017mil|Location2.X=6081.684mil|Location1.Y=4388.135mil|Location2.Y=4395.801mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J3-2(155.321mm,110.236mm) on Bottom Layer And Track (153.801mm,111.556mm)(159.381mm,111.556mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5730.188mil|Location2.X=5737.855mil|Location1.Y=3434.199mil|Location2.Y=3441.865mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5730.188mil|Location2.X=5737.855mil|Location1.Y=3434.199mil|Location2.Y=3441.865mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J4-1(146.431mm,88.646mm) on Top Layer And Track (142.371mm,87.326mm)(147.951mm,87.326mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5724.017mil|Location2.X=5731.683mil|Location1.Y=3538.135mil|Location2.Y=3545.801mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5724.017mil|Location2.X=5731.683mil|Location1.Y=3538.135mil|Location2.Y=3545.801mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J4-1(146.431mm,88.646mm) on Top Layer And Track (142.371mm,89.966mm)(147.951mm,89.966mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5630.188mil|Location2.X=5637.855mil|Location1.Y=3434.199mil|Location2.Y=3441.865mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5630.188mil|Location2.X=5637.855mil|Location1.Y=3434.199mil|Location2.Y=3441.865mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J4-2(143.891mm,88.646mm) on Top Layer And Track (142.371mm,87.326mm)(147.951mm,87.326mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5624.017mil|Location2.X=5631.683mil|Location1.Y=3538.135mil|Location2.Y=3545.801mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5624.017mil|Location2.X=5631.683mil|Location1.Y=3538.135mil|Location2.Y=3545.801mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J4-2(143.891mm,88.646mm) on Top Layer And Track (142.371mm,89.966mm)(147.951mm,89.966mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6179.199mil|Location2.X=6186.865mil|Location1.Y=3840.188mil|Location2.Y=3847.855mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6179.199mil|Location2.X=6186.865mil|Location1.Y=3840.188mil|Location2.Y=3847.855mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J5-1(158.369mm,98.425mm) on Bottom Layer And Track (157.049mm,96.905mm)(157.049mm,102.485mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6283.135mil|Location2.X=6290.801mil|Location1.Y=3834.017mil|Location2.Y=3841.683mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6283.135mil|Location2.X=6290.801mil|Location1.Y=3834.017mil|Location2.Y=3841.683mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J5-1(158.369mm,98.425mm) on Bottom Layer And Track (159.689mm,96.905mm)(159.689mm,102.485mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6169.839mil|Location2.X=6181.089mil|Location1.Y=3979.381mil|Location2.Y=3990.631mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6169.839mil|Location2.X=6181.089mil|Location1.Y=3979.381mil|Location2.Y=3990.631mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.024mm &lt; 0.254mm) Between Pad J5-2(158.369mm,100.965mm) on Bottom Layer And Text "J5" (156.718mm,100.965mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.024mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6179.199mil|Location2.X=6186.865mil|Location1.Y=3940.188mil|Location2.Y=3947.855mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6179.199mil|Location2.X=6186.865mil|Location1.Y=3940.188mil|Location2.Y=3947.855mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J5-2(158.369mm,100.965mm) on Bottom Layer And Track (157.049mm,96.905mm)(157.049mm,102.485mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6283.135mil|Location2.X=6290.801mil|Location1.Y=3934.017mil|Location2.Y=3941.683mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6283.135mil|Location2.X=6290.801mil|Location1.Y=3934.017mil|Location2.Y=3941.683mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad J5-2(158.369mm,100.965mm) on Bottom Layer And Track (159.689mm,96.905mm)(159.689mm,102.485mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6651.176mil|Location2.X=6658.843mil|Location1.Y=4296.18mil|Location2.Y=4303.846mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6651.176mil|Location2.X=6658.843mil|Location1.Y=4296.18mil|Location2.Y=4303.846mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad U1-7(167.612mm,108.585mm) on Top Layer And Text "U1" (169.037mm,111.252mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5926.157mil|Location2.X=5933.824mil|Location1.Y=4266.15mil|Location2.Y=4273.817mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5926.157mil|Location2.X=5933.824mil|Location1.Y=4266.15mil|Location2.Y=4273.817mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad U1-8(151.412mm,108.585mm) on Top Layer And Text "U2" (149.098mm,108.458mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5903.135mil|Location2.X=5910.802mil|Location1.Y=4169.211mil|Location2.Y=4176.878mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5903.135mil|Location2.X=5910.802mil|Location1.Y=4169.211mil|Location2.Y=4176.878mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (Collision &lt; 0.254mm) Between Pad U1-9(151.412mm,106.045mm) on Top Layer And Text "U2" (149.098mm,108.458mm) on Top Overlay [Top Overlay] to [Top Solder] clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=4013.901mil|Location2.Y=4025.151mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=4013.901mil|Location2.Y=4025.151mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.048mm &lt; 0.254mm) Between Pad U3-1(152.347mm,102.87mm) on Bottom Layer And Track (152.347mm,101.245mm)(152.347mm,101.945mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.048mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=4074.847mil|Location2.Y=4086.097mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=4074.847mil|Location2.Y=4086.097mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.048mm &lt; 0.254mm) Between Pad U3-1(152.347mm,102.87mm) on Bottom Layer And Track (152.347mm,103.795mm)(152.347mm,109.295mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.048mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3974.65mil|Location2.Y=3985.9mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3974.65mil|Location2.Y=3985.9mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.038mm &lt; 0.254mm) Between Pad U3-2(152.347mm,100.33mm) on Bottom Layer And Track (152.347mm,101.245mm)(152.347mm,101.945mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.038mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3914.197mil|Location2.Y=3925.447mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3914.197mil|Location2.Y=3925.447mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.033mm &lt; 0.254mm) Between Pad U3-2(152.347mm,100.33mm) on Bottom Layer And Track (152.347mm,98.72mm)(152.347mm,99.42mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.033mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3814mil|Location2.Y=3825.25mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3814mil|Location2.Y=3825.25mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.043mm &lt; 0.254mm) Between Pad U3-3(152.347mm,97.79mm) on Bottom Layer And Track (152.347mm,96.17mm)(152.347mm,96.87mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.043mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3874.945mil|Location2.Y=3886.195mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3874.945mil|Location2.Y=3886.195mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.053mm &lt; 0.254mm) Between Pad U3-3(152.347mm,97.79mm) on Bottom Layer And Track (152.347mm,98.72mm)(152.347mm,99.42mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.053mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3713.803mil|Location2.Y=3725.053mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3713.803mil|Location2.Y=3725.053mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.053mm &lt; 0.254mm) Between Pad U3-4(152.347mm,95.25mm) on Bottom Layer And Track (152.347mm,88.695mm)(152.347mm,94.32mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.053mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3774.748mil|Location2.Y=3785.998mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5992.278mil|Location2.X=6003.528mil|Location1.Y=3774.748mil|Location2.Y=3785.998mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.043mm &lt; 0.254mm) Between Pad U3-4(152.347mm,95.25mm) on Bottom Layer And Track (152.347mm,96.17mm)(152.347mm,96.87mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.043mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.388mil|Location2.X=5436.638mil|Location1.Y=3730.907mil|Location2.Y=3742.157mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.388mil|Location2.X=5436.638mil|Location1.Y=3730.907mil|Location2.Y=3742.157mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.202mm &lt; 0.254mm) Between Pad U3-5(136.847mm,95.25mm) on Bottom Layer And Text "GND" (138.176mm,95.741mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.202mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3713.803mil|Location2.Y=3725.053mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3713.803mil|Location2.Y=3725.053mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.053mm &lt; 0.254mm) Between Pad U3-5(136.847mm,95.25mm) on Bottom Layer And Track (136.847mm,88.695mm)(136.847mm,94.32mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.053mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3774.748mil|Location2.Y=3785.998mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3774.748mil|Location2.Y=3785.998mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.043mm &lt; 0.254mm) Between Pad U3-5(136.847mm,95.25mm) on Bottom Layer And Track (136.847mm,96.17mm)(136.847mm,96.87mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.043mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.39mil|Location2.X=5436.64mil|Location1.Y=3829.61mil|Location2.Y=3840.86mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.39mil|Location2.X=5436.64mil|Location1.Y=3829.61mil|Location2.Y=3840.86mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.202mm &lt; 0.254mm) Between Pad U3-6(136.847mm,97.79mm) on Bottom Layer And Text "RD" (138.176mm,98.274mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.202mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3814mil|Location2.Y=3825.25mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3814mil|Location2.Y=3825.25mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.043mm &lt; 0.254mm) Between Pad U3-6(136.847mm,97.79mm) on Bottom Layer And Track (136.847mm,96.17mm)(136.847mm,96.87mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.043mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3874.453mil|Location2.Y=3885.703mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3874.453mil|Location2.Y=3885.703mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.028mm &lt; 0.254mm) Between Pad U3-6(136.847mm,97.79mm) on Bottom Layer And Track (136.847mm,98.695mm)(136.847mm,99.395mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.028mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.336mil|Location2.X=5436.586mil|Location1.Y=3961.888mil|Location2.Y=3973.138mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.336mil|Location2.X=5436.586mil|Location1.Y=3961.888mil|Location2.Y=3973.138mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.209mm &lt; 0.254mm) Between Pad U3-7(136.847mm,100.33mm) on Bottom Layer And Text "IRD" (138.176mm,100.808mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.209mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3974.65mil|Location2.Y=3985.9mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3974.65mil|Location2.Y=3985.9mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.038mm &lt; 0.254mm) Between Pad U3-7(136.847mm,100.33mm) on Bottom Layer And Track (136.847mm,101.245mm)(136.847mm,101.945mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.038mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3913.705mil|Location2.Y=3924.955mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=3913.705mil|Location2.Y=3924.955mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.058mm &lt; 0.254mm) Between Pad U3-7(136.847mm,100.33mm) on Bottom Layer And Track (136.847mm,98.695mm)(136.847mm,99.395mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.058mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.329mil|Location2.X=5436.579mil|Location1.Y=4061.803mil|Location2.Y=4073.053mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5425.329mil|Location2.X=5436.579mil|Location1.Y=4061.803mil|Location2.Y=4073.053mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.208mm &lt; 0.254mm) Between Pad U3-8(136.847mm,102.87mm) on Bottom Layer And Text "INT" (138.176mm,103.341mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.208mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=4013.901mil|Location2.Y=4025.151mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=4013.901mil|Location2.Y=4025.151mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.048mm &lt; 0.254mm) Between Pad U3-8(136.847mm,102.87mm) on Bottom Layer And Track (136.847mm,101.245mm)(136.847mm,101.945mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.048mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=4074.847mil|Location2.Y=4086.097mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5382.042mil|Location2.X=5393.292mil|Location1.Y=4074.847mil|Location2.Y=4086.097mil|Absolute=True">Silk To Solder Mask Clearance Constraint: (0.048mm &lt; 0.254mm) Between Pad U3-8(136.847mm,102.87mm) on Bottom Layer And Track (136.847mm,103.795mm)(136.847mm,109.295mm) on Bottom Overlay [Bottom Overlay] to [Bottom Solder] clearance [0.048mm]</acronym></a><br></td>
+</tr>
+</table></a><hr color="#EEEEEE"><a href="#top" style="font-size: 0.9em">Back to top</a><br><br><a name="IDWA3BIM3XN0VLHV5PKOG2BNI2WKBQWV1LECVCMUPPZ20IZ3QC5MKJ"><table>
+<tr>
+<th style="text-align : left" colspan="1" class="rule">Silk to Silk (Clearance=0.254mm) (All),(All)</th>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6259.388mil|Location2.X=6270.638mil|Location1.Y=4273.918mil|Location2.Y=4285.168mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6259.388mil|Location2.X=6270.638mil|Location1.Y=4273.918mil|Location2.Y=4285.168mil|Absolute=True">Silk To Silk Clearance Constraint: (0.231mm &lt; 0.254mm) Between Text "J3" (161.417mm,106.934mm) on Bottom Overlay And Track (153.801mm,108.916mm)(159.381mm,108.916mm) on Bottom Overlay Silk Text to Silk Clearance [0.231mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6269.217mil|Location2.X=6280.467mil|Location1.Y=4273.918mil|Location2.Y=4285.168mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6269.217mil|Location2.X=6280.467mil|Location1.Y=4273.918mil|Location2.Y=4285.168mil|Absolute=True">Silk To Silk Clearance Constraint: (0.231mm &lt; 0.254mm) Between Text "J3" (161.417mm,106.934mm) on Bottom Overlay And Track (159.381mm,108.916mm)(159.381mm,111.556mm) on Bottom Overlay Silk Text to Silk Clearance [0.231mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6171.414mil|Location2.X=6182.664mil|Location1.Y=3979.381mil|Location2.Y=3990.631mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=6171.414mil|Location2.X=6182.664mil|Location1.Y=3979.381mil|Location2.Y=3990.631mil|Absolute=True">Silk To Silk Clearance Constraint: (0.104mm &lt; 0.254mm) Between Text "J5" (156.718mm,100.965mm) on Bottom Overlay And Track (157.049mm,96.905mm)(157.049mm,102.485mm) on Bottom Overlay Silk Text to Silk Clearance [0.104mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_even" onmouseover="className = 'onmouseover_even'" onmouseout="className = 'onmouseout_even'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5994.07mil|Location2.X=6001.736mil|Location1.Y=3681.157mil|Location2.Y=3688.824mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5994.07mil|Location2.X=6001.736mil|Location1.Y=3681.157mil|Location2.Y=3688.824mil|Absolute=True">Silk To Silk Clearance Constraint: (Collision &lt; 0.254mm) Between Text "R3" (154.686mm,92.075mm) on Bottom Overlay And Track (152.347mm,88.695mm)(152.347mm,94.32mm) on Bottom Overlay Silk Text to Silk Clearance [0mm]</acronym></a><br></td>
+</tr>
+<tr class="onmouseout_odd" onmouseover="className = 'onmouseover_odd'" onmouseout="className = 'onmouseout_odd'">
+<td class="column1"><a href="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5855.659mil|Location2.X=5866.909mil|Location1.Y=4254.362mil|Location2.Y=4265.612mil|Absolute=True" class="callback"><acronym title="dxpprocess://PCB:Zoom?document=C:\2026_VitaLink\Hardware\MainBoard_VitaLink\PCB_VitaLink.PcbDoc;viewname=PCBEditor;Action=AREA_DYNAMICZOOM|Location1.X=5855.659mil|Location2.X=5866.909mil|Location1.Y=4254.362mil|Location2.Y=4265.612mil|Absolute=True">Silk To Silk Clearance Constraint: (0.189mm &lt; 0.254mm) Between Text "U2" (149.098mm,108.458mm) on Top Overlay And Track (148.655mm,91.196mm)(148.655mm,111.456mm) on Top Overlay Silk Text to Silk Clearance [0.189mm]</acronym></a><br></td>
+</tr>
+</table></a><hr color="#EEEEEE"><a href="#top" style="font-size: 0.9em">Back to top</a><br><br></body>
+</html>
