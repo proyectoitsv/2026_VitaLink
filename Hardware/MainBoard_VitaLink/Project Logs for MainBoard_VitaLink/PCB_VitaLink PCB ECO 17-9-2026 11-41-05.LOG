@@ -1,0 +1,22 @@
+Added Component: Designator=U1(MODULE_102010428)
+Add component (AddParameter): Name = "Check_prices"; Value = "https://www.snapeda.com/parts/102010428/Seeed+Technology+Co.%252C+Ltd/view-part/?ref=eda"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "MF"; Value = "Seeed Technology Co., Ltd"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "MP"; Value = "102010428"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Package"; Value = "None"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "SnapEDA_Link"; Value = "https://www.snapeda.com/parts/102010428/Seeed+Technology+Co.%252C+Ltd/view-part/?ref=snap"; VariantName = "[No Variations]"
+Add component (AddParameter): Name = "Value"; Value = ""; VariantName = "[No Variations]"
+Added Pin To Net: NetName=D0 Pin=U1-1
+Added Pin To Net: NetName=D1 Pin=U1-2
+Added Pin To Net: NetName=D2 Pin=U1-3
+Added Pin To Net: NetName=D3 Pin=U1-4
+Added Pin To Net: NetName=D4 Pin=U1-5
+Added Pin To Net: NetName=D5 Pin=U1-6
+Added Pin To Net: NetName=D6 Pin=U1-7
+Added Pin To Net: NetName=D7 Pin=U1-8
+Added Pin To Net: NetName=D8 Pin=U1-9
+Added Pin To Net: NetName=D9 Pin=U1-10
+Added Pin To Net: NetName=D10 Pin=U1-11
+Added Pin To Net: NetName=+3.3 Pin=U1-12
+Added Pin To Net: NetName=GND Pin=U1-13
+Added Pin To Net: NetName=+5 Pin=U1-14
+Added Member To Class: ClassName=Esquematico_VitaLink Member=Component U1 102010428
