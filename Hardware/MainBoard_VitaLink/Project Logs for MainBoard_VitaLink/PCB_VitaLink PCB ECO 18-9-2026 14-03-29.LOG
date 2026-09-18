@@ -1,0 +1,20 @@
+Change Component Footprint: Designator=J1 Old Footprint=FP-M20-9990245-MFG New Footprint=PCBComponent_1
+Change Component Footprint: Designator=J2 Old Footprint=FP-M20-9990245-MFG New Footprint=PCBComponent_1
+Change Component Footprint: Designator=J3 Old Footprint=FP-M20-9990245-MFG New Footprint=PCBComponent_1
+Change Component Footprint: Designator=J4 Old Footprint=FP-M20-9990245-MFG New Footprint=PCBComponent_1
+Change Component Footprint: Designator=J5 Old Footprint=FP-M20-9990245-MFG New Footprint=PCBComponent_1
+Change Component Comment : Designator=J1 Old Comment=M20-9990245 New Comment=Component_1
+Change Component Comment : Designator=J2 Old Comment=M20-9990245 New Comment=Component_1
+Change Component Comment : Designator=J3 Old Comment=M20-9990245 New Comment=Component_1
+Change Component Comment : Designator=J4 Old Comment=M20-9990245 New Comment=Component_1
+Change Component Comment : Designator=J5 Old Comment=M20-9990245 New Comment=Component_1
+Change Managed Component Library Link : Designator=J1 Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID= Old ItemGUID=F59A73ED-AE09-4223-BAF1-DCB52D864783 New ItemGUID= Old RevisionGUID=988F2DF7-6F5B-400B-B3BF-85CAAE509BAD New RevisionGUID=
+Change Managed Component Library Link : Designator=J2 Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID= Old ItemGUID=F59A73ED-AE09-4223-BAF1-DCB52D864783 New ItemGUID= Old RevisionGUID=988F2DF7-6F5B-400B-B3BF-85CAAE509BAD New RevisionGUID=
+Change Managed Component Library Link : Designator=J3 Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID= Old ItemGUID=F59A73ED-AE09-4223-BAF1-DCB52D864783 New ItemGUID= Old RevisionGUID=988F2DF7-6F5B-400B-B3BF-85CAAE509BAD New RevisionGUID=
+Change Managed Component Library Link : Designator=J4 Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID= Old ItemGUID=F59A73ED-AE09-4223-BAF1-DCB52D864783 New ItemGUID= Old RevisionGUID=988F2DF7-6F5B-400B-B3BF-85CAAE509BAD New RevisionGUID=
+Change Managed Component Library Link : Designator=J5 Old VaultGUID=B7D15EC3-160A-466F-A46C-7801FE6295A7 New VaultGUID= Old ItemGUID=F59A73ED-AE09-4223-BAF1-DCB52D864783 New ItemGUID= Old RevisionGUID=988F2DF7-6F5B-400B-B3BF-85CAAE509BAD New RevisionGUID=
+Change component parameters: Designator = "J1" ("J1"); Footprint = "FP-M20-9990245-MFG"; UniqueID = "\NGUDNSTN" ("\NGUDNSTN")
+Change component parameters: Designator = "J2" ("J2"); Footprint = "FP-M20-9990245-MFG"; UniqueID = "\NOLSRLLB" ("\NOLSRLLB")
+Change component parameters: Designator = "J3" ("J3"); Footprint = "FP-M20-9990245-MFG"; UniqueID = "\OGPOMUGX" ("\OGPOMUGX")
+Change component parameters: Designator = "J4" ("J4"); Footprint = "FP-M20-9990245-MFG"; UniqueID = "\WEDRFGEP" ("\WEDRFGEP")
+Change component parameters: Designator = "J5" ("J5"); Footprint = "FP-M20-9990245-MFG"; UniqueID = "\ARWRBBVZ" ("\ARWRBBVZ")
