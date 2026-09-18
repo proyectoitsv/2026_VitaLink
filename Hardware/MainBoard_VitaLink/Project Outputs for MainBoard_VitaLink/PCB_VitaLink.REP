@@ -2,16 +2,22 @@
 FileName = PCB_VitaLink.GBR
 AutoAperture = True
 *************************************************************
-Generating : Bottom Overlay
-      File : PCB_VitaLink.GBO
+Generating : Top Layer
+      File : PCB_VitaLink.GTL
 
-    Adding Layer      : Bottom Overlay
+    Adding Layer      : Top Layer
+
+    Adding Layer      : Multi-Layer
 
 
 Used DCodes :
-    D10
-    D11
-    D12
+    D13
+    D14
+    D15
+    D16
+    D17
+    D18
+    D19
 *************************************************************
 
 *************************************************************
@@ -26,8 +32,32 @@ Generating : Top Paste
 
 
 Used DCodes :
+    D13
+    D14
+*************************************************************
+
+*************************************************************
+Generating : Bottom Layer
+      File : PCB_VitaLink.GBL
+
+    Adding Layer      : Bottom Layer
+
+    Adding Layer      : Multi-Layer
+
+
+Used DCodes :
     D14
     D15
+    D16
+    D17
+    D18
+    D19
+    D20
+    D21
+    D22
+    D23
+    D24
+    D25
 *************************************************************
 
 *************************************************************
@@ -42,88 +72,11 @@ Generating : Bottom Paste
 
 
 Used DCodes :
-    D15
-    D22
-    D23
-    D24
-    D25
-*************************************************************
-
-*************************************************************
-Generating : Top Overlay
-      File : PCB_VitaLink.GTO
-
-    Adding Layer      : Top Overlay
-
-
-Used DCodes :
-    D10
-    D11
-    D12
-    D13
-*************************************************************
-
-*************************************************************
-Generating : Top Solder
-      File : PCB_VitaLink.GTS
-
-    Adding Layer      : Top Solder
-
-    Adding Layer      : Top Layer
-
-    Adding Layer      : Multi-Layer
-
-
-Used DCodes :
     D14
-    D15
-    D16
-    D17
-    D18
-    D19
-*************************************************************
-
-*************************************************************
-Generating : Bottom Layer
-      File : PCB_VitaLink.GBL
-
-    Adding Layer      : Bottom Layer
-
-    Adding Layer      : Multi-Layer
-
-
-Used DCodes :
-    D15
-    D16
-    D17
-    D18
-    D19
     D20
     D21
     D22
-    D23
-    D24
     D25
-    D26
-*************************************************************
-
-*************************************************************
-Generating : Top Layer
-      File : PCB_VitaLink.GTL
-
-    Adding Layer      : Top Layer
-
-    Adding Layer      : Multi-Layer
-
-
-Used DCodes :
-    D14
-    D15
-    D16
-    D17
-    D18
-    D19
-    D20
 *************************************************************
 
 *************************************************************
@@ -138,17 +91,63 @@ Generating : Bottom Solder
 
 
 Used DCodes :
+    D14
     D15
     D16
     D17
     D18
-    D19
+    D20
     D21
     D22
     D23
     D24
     D25
+*************************************************************
+
+*************************************************************
+Generating : Bottom Overlay
+      File : PCB_VitaLink.GBO
+
+    Adding Layer      : Bottom Overlay
+
+
+Used DCodes :
+    D10
+    D11
     D26
+*************************************************************
+
+*************************************************************
+Generating : Top Solder
+      File : PCB_VitaLink.GTS
+
+    Adding Layer      : Top Solder
+
+    Adding Layer      : Top Layer
+
+    Adding Layer      : Multi-Layer
+
+
+Used DCodes :
+    D13
+    D14
+    D15
+    D16
+    D17
+    D18
+*************************************************************
+
+*************************************************************
+Generating : Top Overlay
+      File : PCB_VitaLink.GTO
+
+    Adding Layer      : Top Overlay
+
+
+Used DCodes :
+    D10
+    D11
+    D12
 *************************************************************
 
 *************************************************************
