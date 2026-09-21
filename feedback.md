@@ -1,3 +1,25 @@
+# Reunión 8/6/26
+
+## Comprensión sobre conveniencia: 
+El objetivo principal es entender exactamente qué hacen los sensores. El orador advierte que buscar una 
+"librería mágica" que resuelva el problema los limita y frena su crecimiento técnico.
+
+## Medición empírica: 
+Señala que el primer paso fundamental, antes de programar o avanzar, debe ser usar un osciloscopio para
+medir y entender qué señal está emitiendo el sensor.
+
+## El verdadero rol del técnico: 
+Hace una clara distinción entre un técnico, que vive de entender cómo funcionan las cosas (desde cómo 
+llega una caja hasta sus puntos de fijación), y un operario de una línea de montaje que simplemente 
+ajusta tornillos sin conocer el sistema completo.
+
+## Trabajo en equipo integral:
+Remarca que los cuatro integrantes del grupo deben involucrarse en el desarrollo electrónico del proyecto. 
+Aunque algunos prefieran otras áreas, como el diseño del gabinete o la comunicación de la presentación, 
+todos deben colaborar en la electrónica básica.
+
+
+---------------------------------------------------------------------------------------------------------------------------------
 # Crítica técnica del módulo de comunicaciones
 
 ## Problemas con el SIM800
