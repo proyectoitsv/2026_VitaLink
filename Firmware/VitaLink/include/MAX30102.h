@@ -5,5 +5,6 @@
 
 bool inicializarSensorBPM();
 int procesarLatidosBPM();
+int procesarOxigenoSangre();
 
 #endif // MAX30102_H

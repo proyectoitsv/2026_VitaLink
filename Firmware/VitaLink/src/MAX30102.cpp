@@ -17,6 +17,7 @@ static MAX30105 sensor;
 
 static bool pulseraPuesta = false;
 static unsigned long tiempoInicioToque = 0;
+
 static float picoMaximo = 0.0;
 static float minimoLocal = 999999.0;
 static bool buscandoPico = true;
@@ -29,6 +30,16 @@ static int sumaVentanaBPM = 0;
 static byte latidosEnVentana = 0;
 static int bpmDefinitivo = 0;
 
+static float maxIR = 0.0;
+static float minIR = 999999.0;
+static float maxRed = 0.0;
+static float minRed = 999999.0;
+static float sumaIR = 0.0;
+static float sumaRed = 0.0;
+static int muestrasSpO2 = 0;
+static int spo2Definitivo = 0;
+static unsigned long tiempoInicioVentanaSpO2 = 0;
+
 static void resetearVariablesBPM() {
     picoMaximo = 0.0; 
     minimoLocal = 999999.0;
@@ -40,6 +51,13 @@ static void resetearVariablesBPM() {
     buscandoPico = true;
     tiempoUltimoLatido = millis();
     tiempoInicioVentanaBPM = millis();
+
+    maxIR = 0.0; minIR = 999999.0;
+    maxRed = 0.0; minRed = 999999.0;
+    sumaIR = 0.0; sumaRed = 0.0;
+    muestrasSpO2 = 0;
+    spo2Definitivo = 0;
+    tiempoInicioVentanaSpO2 = millis();
 }
 
 bool inicializarSensorBPM() {
@@ -129,4 +147,52 @@ int procesarLatidosBPM() {
     }
 
     return bpmDefinitivo; 
+}
+
+int procesarOxigenoSangre() {
+    long irCrudo = sensor.getIR();
+    long redCrudo = sensor.getRed();
+    float irActual = (float)irCrudo;
+    float redActual = (float)redCrudo;
+
+    if (irActual <= UMBRAL_PULSERA_PUESTA) return -1;
+
+    if (irActual > maxIR) maxIR = irActual;
+    if (irActual < minIR) minIR = irActual;
+    if (redActual > maxRed) maxRed = redActual;
+    if (redActual < minRed) minRed = redActual;
+
+    sumaIR += irActual;
+    sumaRed += redActual;
+    muestrasSpO2++;
+
+    if (millis() - tiempoInicioVentanaSpO2 >= TIEMPO_VENTANA_MS) {
+        if (muestrasSpO2 > 0) {
+            float dcIR = sumaIR / muestrasSpO2;
+            float acIR = maxIR - minIR;
+            
+            float dcRed = sumaRed / muestrasSpO2;
+            float acRed = maxRed - minRed;
+
+            if (dcIR > 0 && dcRed > 0 && acIR > 0) {
+                float R = (acRed / dcRed) / (acIR / dcIR);
+                float spo2Calculado = 110.0 - (25.0 * R);
+
+                if (spo2Calculado > 100.0) spo2Calculado = 100.0;
+                if (spo2Calculado < 70.0) spo2Calculado = 70.0;
+
+                spo2Definitivo = (int)spo2Calculado;
+            }
+        }
+
+        maxIR = 0.0; minIR = 999999.0;
+        maxRed = 0.0; minRed = 999999.0;
+        sumaIR = 0.0; sumaRed = 0.0;
+        muestrasSpO2 = 0;
+        tiempoInicioVentanaSpO2 = millis();
+    }
+
+    if (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS) return -1;
+    
+    return spo2Definitivo;
 }
