@@ -1,18 +1,22 @@
 #include <Arduino.h>
+#include <Wire.h>
 
-// put function declarations here:
-int myFunction(int, int);
+SemaphoreHandle_t i2cMutex;
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+    Serial.begin(115200);
+    
+    // Se inicia el I2C (SDA y SCL por defecto del XIAO ESP32 S3)
+    Wire.begin();
+
+    // Crear el Mutex para el I2C
+    i2cMutex = xSemaphoreCreateMutex();
+    if (i2cMutex == NULL) {
+        Serial.println("Error: No se pudo crear el Mutex I2C");
+        while (1); // Detener sistema si falla el RTOS
+    }
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
-
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+    vTaskDelete(NULL); 
 }
