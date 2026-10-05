@@ -1,11 +1,11 @@
 /* 
- * Archivo: modulo_energia.h
+ * Archivo: gestión_energia.h
  * Descripción: DECLARACIÓN de las funciones del módulo de gestión
  * de energía y háptica. Contrato público del módulo.
  */
 
-#ifndef MODULO_ENERGIA_H
-#define MODULO_ENERGIA_H
+#ifndef gestión_energia_H
+#define gestión_energia_H
 
 #include <Arduino.h>
 
