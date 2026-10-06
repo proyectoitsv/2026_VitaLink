@@ -1,21 +1,21 @@
 /* 
- * Archivo: gestión_energia.cpp
+ * Archivo: gestion_energia.cpp
  * Descripción: 
  */
 
 #include <Arduino.h>
-#include "gestión_energia.h" 
+#include "gestion_energia.h" 
 
 
-#define Maxima_Tensión 2.1 // Valor de tensión maxima de la bateria.
+#define Maxima_Tension 2.1 // Valor de tensión maxima de la bateria.
 #define Cambio_de_fase_1 1.95 // Variable que define cuando hacer el primer cambio de fase.
 #define Cambio_de_fase_2 1.9 // Variable que define cuando hacer el segundo cambio de fase.
-#define Minima_Tensión 1.6 //Valor de tensión minimo de la bateria.
+#define Minima_Tension 1.6 //Valor de tensión minimo de la bateria.
 
 // Variable donde se almacena el valor de tensión entrante.
-static float Tensión_bruto;
+static float Tension_bruto;
 // Variable donde se almacena el valor de tensión despues de un calculo (dando un valores entre 4.2 y 3.2).
-static float Tensión; 
+static float Tension; 
 // Variable donde se almacena el porcentaje de bateria.
 static float Porcentaje_bruto;
 // Variable donde se almacena el porcentaje de bateria redondeado a multiplos de 10.
@@ -26,18 +26,18 @@ void inicializarModulo(){
 }
 
 float leerVoltajeBateria(){
-Tensión_bruto = analogRead (PIN_ADC);
-Tensión = ((Tensión_bruto/4095.0) * 3.3);
+Tension_bruto = analogRead (PIN_ADC);
+Tension = ((Tension_bruto/4095.0) * 3.3);
 }
 
-float conversión(float tenMax, float tenMin, int porMax, int porMin){
-Porcentaje_bruto = porMin + (Tensión - tenMin) * (porMax - porMin) / (tenMax - tenMin);
+float conversion(float tenMax, float tenMin, int porMax, int porMin){
+Porcentaje_bruto = porMin + (Tension - tenMin) * (porMax - porMin) / (tenMax - tenMin);
 }
 
 float voltajeAPorcentaje(){
-if (Cambio_de_fase_1 < Tensión) return conversión (Maxima_Tensión,Cambio_de_fase_1, 100, 70);
-if (Tensión > Cambio_de_fase_2 && Tensión <= Cambio_de_fase_1) return conversión (Cambio_de_fase_1, Cambio_de_fase_2, 69, 55);
-if (Tensión <= Cambio_de_fase_2) return conversión (Cambio_de_fase_2, Minima_Tensión, 54, 0);
+if (Cambio_de_fase_1 < Tension) return conversion (Maxima_Tension,Cambio_de_fase_1, 100, 70);
+if (Tension > Cambio_de_fase_2 && Tension <= Cambio_de_fase_1) return conversion (Cambio_de_fase_1, Cambio_de_fase_2, 69, 55);
+if (Tension <= Cambio_de_fase_2) return conversion (Cambio_de_fase_2, Minima_Tension, 54, 0);
 }
 
 float redondeoPorcentaje(){

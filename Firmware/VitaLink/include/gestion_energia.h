@@ -1,11 +1,11 @@
 /* 
- * Archivo: gestión_energia.h
+ * Archivo: gestion_energia.h
  * Descripción: DECLARACIÓN de las funciones del módulo de gestión
  * de energía y háptica. Contrato público del módulo.
  */
 
-#ifndef gestión_energia_H
-#define gestión_energia_H
+#ifndef gestion_energia_H
+#define gestion_energia_H
 
 #include <Arduino.h>
 
@@ -28,7 +28,7 @@ float leerVoltajeBateria();
 float voltajeAPorcentaje();
 
 // Realiza el mapeo entre voltaje y porcentaje con sus respectivos valores maximos y minimos.
-float conversión ();
+float conversion ();
 
 // Recibe el porcentaje con decimales y lo redondea al múltiplo de 10 más cercano
 float redondeoPorcentaje();
