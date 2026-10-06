@@ -42,5 +42,9 @@ if (Tensión > Cambio_de_fase_2 && Tensión <= Cambio_de_fase_1) return conversi
 if (Tensión <= Cambio_de_fase_2) return conversión (Cambio_de_fase_2, Minima_Tensión, 54, 0);
 }
 
+float redondeoPorcentaje(){
+Porcentaje_redondeado = round (Porcentaje_bruto/10) * 10;
+return Porcentaje_redondeado;
+}
 
 
