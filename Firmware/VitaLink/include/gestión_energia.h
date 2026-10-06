@@ -25,9 +25,12 @@ void inicializarModulo();
 float leerVoltajeBateria();
 
 // Convierte un voltaje real a porcentaje usando la curva LiPo.
-float voltajeAPorcentaje(float tenMax, float tenMin, int porMax, int porMin);
+float voltajeAPorcentaje();
+
+// Realiza el mapeo entre voltaje y porcentaje con sus respectivos valores maximos y minimos.
+float conversión ();
 
 // Recibe el porcentaje con decimales y lo redondea al múltiplo de 10 más cercano
-float redondePorcentaje();
+float redondeoPorcentaje();
 
 #endif // FIN DEL MODULO_ENERGIA_H
