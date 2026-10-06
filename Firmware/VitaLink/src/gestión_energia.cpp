@@ -7,10 +7,10 @@
 #include "gestión_energia.h" 
 
 
-#define Maxima_Tensión 4.2 // Valor de tensión maxima de la bateria.
-#define Cambio_de_fase_1 3.9// Variable que define cuando hacer el primer cambio de fase.
-#define Cambio_de_fase_2 3.8 // Variable que define cuando hacer el segundo cambio de fase.
-#define Minima_Tensión 3.2//Valor de tensión minimo de la bateria.
+#define Maxima_Tensión 2.1 // Valor de tensión maxima de la bateria.
+#define Cambio_de_fase_1 1.95 // Variable que define cuando hacer el primer cambio de fase.
+#define Cambio_de_fase_2 1.9 // Variable que define cuando hacer el segundo cambio de fase.
+#define Minima_Tensión 1.6 //Valor de tensión minimo de la bateria.
 
 // Variable donde se almacena el valor de tensión entrante.
 static float Tensión_bruto;
