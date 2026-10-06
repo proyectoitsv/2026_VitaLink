@@ -28,12 +28,10 @@ void inicializarModulo(){
 float leerVoltajeBateria(){
 Tensión_bruto = analogRead (PIN_ADC);
 Tensión = ((Tensión_bruto/4095.0) * 3.3);
-return Tensión;
 }
 
 float conversión(float tenMax, float tenMin, int porMax, int porMin){
 Porcentaje_bruto = porMin + (Tensión - tenMin) * (porMax - porMin) / (tenMax - tenMin);
-return Porcentaje_bruto;
 }
 
 float voltajeAPorcentaje(){
@@ -44,7 +42,12 @@ if (Tensión <= Cambio_de_fase_2) return conversión (Cambio_de_fase_2, Minima_T
 
 float redondeoPorcentaje(){
 Porcentaje_redondeado = round (Porcentaje_bruto/10) * 10;
-return Porcentaje_redondeado;
 }
 
+float llamarParaPorcentaje(){
+leerVoltajeBateria();
+voltajeAPorcentaje();
+redondeoPorcentaje();
+return Porcentaje_redondeado;
+}
 
