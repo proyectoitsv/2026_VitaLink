@@ -40,6 +40,22 @@ static int muestrasSpO2 = 0;
 static int spo2Definitivo = 0;
 static unsigned long tiempoInicioVentanaSpO2 = 0;
 
+static long ultimoIR = 0;
+static long ultimoRed = 0;
+static unsigned long idMuestraGlobal = 0;
+
+static void actualizarLecturas() {
+    sensor.check(); 
+    
+    // Se precesa todos los datos nuevos disponibles en la cola de la librería
+    while (sensor.available()) {
+        ultimoIR = sensor.getFIFOIR();
+        ultimoRed = sensor.getFIFORed();
+        sensor.nextSample(); // Avanza el puntero
+        idMuestraGlobal++;   // "Etiquetamos" esta nueva muestra
+    }
+}
+
 static void resetearVariablesBPM() {
     picoMaximo = 0.0; 
     minimoLocal = 999999.0;
@@ -76,64 +92,74 @@ bool inicializarSensorBPM() {
 }
 
 int procesarLatidosBPM() {
-    long valorCrudo = sensor.getIR();
-    float valorActual = (float)valorCrudo;
-
-    if (valorActual <= UMBRAL_PULSERA_PUESTA) { 
-        pulseraPuesta = false;
-        resetearVariablesBPM();
-        return -1; 
-    }
-
-    if (!pulseraPuesta) {
-        pulseraPuesta = true;
-        tiempoInicioToque = millis();
-        resetearVariablesBPM();
-    }
-
-    if (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS) return -1;
+    actualizarLecturas();
     
-    if (buscandoPico) {
-        if (valorActual > picoMaximo) picoMaximo = valorActual; 
-        else picoMaximo -= 2.0; 
+    static unsigned long ultimoIdBPM = 0;
+    
+    // Solo se ejecuta si hay una muestra nueva.
+    // Esto garantiza que "picoMaximo -= 2.0" caiga a la velocidad real del corazón
+    // sin importar qué tan rápido corra el main.
+    if (ultimoIdBPM != idMuestraGlobal) {
+        ultimoIdBPM = idMuestraGlobal;
+        
+        float valorActual = (float)ultimoIR;
 
-        float caida = picoMaximo - valorActual;
-
-        if (caida > CAIDA_MINIMA_IR && caida < RANGO_CAIDA_MAX_IR) { 
-            unsigned long tiempoAhora = millis();
-            unsigned long intervalo = tiempoAhora - tiempoUltimoLatido;
-
-            if (intervalo > MIN_INTERVALO_LATIDO_MS && intervalo < MAX_INTERVALO_LATIDO_MS) { 
-                int bpmInstantaneo = 60000 / intervalo;
-                if (bpmInstantaneo > MIN_BPM_VALIDO && bpmInstantaneo < MAX_BPM_VALIDO) {
-                    ultimosBPM[indiceBPM] = bpmInstantaneo;
-                    indiceBPM++;
-                    if (indiceBPM >= CANTIDAD_LATIDOS_FILTRO) indiceBPM = 0; 
-                    
-                    int suma = 0, datosValidos = 0;
-                    for (byte i = 0 ; i < CANTIDAD_LATIDOS_FILTRO ; i++) {
-                        if (ultimosBPM[i] != 0) { suma += ultimosBPM[i]; datosValidos++; }
-                    }
-                    if (datosValidos > 0) bpmPromedio = suma / datosValidos; 
-
-                    sumaVentanaBPM += bpmPromedio;
-                    latidosEnVentana++;
-                }
-                tiempoUltimoLatido = tiempoAhora; 
-            }
-            buscandoPico = false; 
-            minimoLocal = valorActual; 
+        if (valorActual <= UMBRAL_PULSERA_PUESTA) { 
+            pulseraPuesta = false;
+            resetearVariablesBPM();
+            return -1; 
         }
-        else if (caida >= RANGO_CAIDA_MAX_IR) picoMaximo = valorActual; 
-    } 
-    else {
-        if (valorActual < minimoLocal) minimoLocal = valorActual;
-        else minimoLocal += 2.0; 
 
-        float subida = valorActual - minimoLocal;
-        if (subida > CAIDA_MINIMA_IR) {
-            buscandoPico = true;
-            picoMaximo = valorActual; 
+        if (!pulseraPuesta) {
+            pulseraPuesta = true;
+            tiempoInicioToque = millis();
+            resetearVariablesBPM();
+        }
+
+        if (millis() - tiempoInicioToque >= TIEMPO_ESTABILIZACION_MS) {
+            if (buscandoPico) {
+                if (valorActual > picoMaximo) picoMaximo = valorActual; 
+                else picoMaximo -= 2.0; 
+
+                float caida = picoMaximo - valorActual;
+
+                if (caida > CAIDA_MINIMA_IR && caida < RANGO_CAIDA_MAX_IR) { 
+                    unsigned long tiempoAhora = millis();
+                    unsigned long intervalo = tiempoAhora - tiempoUltimoLatido;
+
+                    if (intervalo > MIN_INTERVALO_LATIDO_MS && intervalo < MAX_INTERVALO_LATIDO_MS) { 
+                        int bpmInstantaneo = 60000 / intervalo;
+                        if (bpmInstantaneo > MIN_BPM_VALIDO && bpmInstantaneo < MAX_BPM_VALIDO) {
+                            ultimosBPM[indiceBPM] = bpmInstantaneo;
+                            indiceBPM++;
+                            if (indiceBPM >= CANTIDAD_LATIDOS_FILTRO) indiceBPM = 0; 
+                            
+                            int suma = 0, datosValidos = 0;
+                            for (byte i = 0 ; i < CANTIDAD_LATIDOS_FILTRO ; i++) {
+                                if (ultimosBPM[i] != 0) { suma += ultimosBPM[i]; datosValidos++; }
+                            }
+                            if (datosValidos > 0) bpmPromedio = suma / datosValidos; 
+
+                            sumaVentanaBPM += bpmPromedio;
+                            latidosEnVentana++;
+                        }
+                        tiempoUltimoLatido = tiempoAhora; 
+                    }
+                    buscandoPico = false; 
+                    minimoLocal = valorActual; 
+                }
+                else if (caida >= RANGO_CAIDA_MAX_IR) picoMaximo = valorActual; 
+            } 
+            else {
+                if (valorActual < minimoLocal) minimoLocal = valorActual;
+                else minimoLocal += 2.0; 
+
+                float subida = valorActual - minimoLocal;
+                if (subida > CAIDA_MINIMA_IR) {
+                    buscandoPico = true;
+                    picoMaximo = valorActual; 
+                }
+            }
         }
     }
 
@@ -150,21 +176,28 @@ int procesarLatidosBPM() {
 }
 
 int procesarOxigenoSangre() {
-    long irCrudo = sensor.getIR();
-    long redCrudo = sensor.getRed();
-    float irActual = (float)irCrudo;
-    float redActual = (float)redCrudo;
+    actualizarLecturas();
 
-    if (irActual <= UMBRAL_PULSERA_PUESTA) return -1;
+    static unsigned long ultimoIdSpO2 = 0;
+    
+    // Solo sumamos para el oxígeno si la muestra es nueva (evita promedios falsos)
+    if (ultimoIdSpO2 != idMuestraGlobal) {
+        ultimoIdSpO2 = idMuestraGlobal;
+        
+        float irActual = (float)ultimoIR;
+        float redActual = (float)ultimoRed;
 
-    if (irActual > maxIR) maxIR = irActual;
-    if (irActual < minIR) minIR = irActual;
-    if (redActual > maxRed) maxRed = redActual;
-    if (redActual < minRed) minRed = redActual;
+        if (irActual <= UMBRAL_PULSERA_PUESTA) return -1;
 
-    sumaIR += irActual;
-    sumaRed += redActual;
-    muestrasSpO2++;
+        if (irActual > maxIR) maxIR = irActual;
+        if (irActual < minIR) minIR = irActual;
+        if (redActual > maxRed) maxRed = redActual;
+        if (redActual < minRed) minRed = redActual;
+
+        sumaIR += irActual;
+        sumaRed += redActual;
+        muestrasSpO2++;
+    }
 
     if (millis() - tiempoInicioVentanaSpO2 >= TIEMPO_VENTANA_MS) {
         if (muestrasSpO2 > 0) {
