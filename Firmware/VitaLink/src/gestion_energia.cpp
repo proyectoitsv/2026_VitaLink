@@ -25,26 +25,26 @@ void inicializarModulo(){
  pinMode(PIN_ADC, INPUT);
 }
 
-float leerVoltajeBateria(){
+void leerVoltajeBateria(){
 Tension_bruto = analogRead (PIN_ADC);
 Tension = ((Tension_bruto/4095.0) * 3.3);
 }
 
-float conversion(float tenMax, float tenMin, int porMax, int porMin){
+void conversion(float tenMax, float tenMin, int porMax, int porMin){
 Porcentaje_bruto = porMin + (Tension - tenMin) * (porMax - porMin) / (tenMax - tenMin);
 }
 
-float voltajeAPorcentaje(){
-if (Cambio_de_fase_1 < Tension) return conversion (Maxima_Tension,Cambio_de_fase_1, 100, 70);
-if (Tension > Cambio_de_fase_2 && Tension <= Cambio_de_fase_1) return conversion (Cambio_de_fase_1, Cambio_de_fase_2, 69, 55);
-if (Tension <= Cambio_de_fase_2) return conversion (Cambio_de_fase_2, Minima_Tension, 54, 0);
+void voltajeAPorcentaje(){
+if (Cambio_de_fase_1 < Tension) conversion (Maxima_Tension,Cambio_de_fase_1, 100, 70);
+if (Tension > Cambio_de_fase_2 && Tension <= Cambio_de_fase_1) conversion (Cambio_de_fase_1, Cambio_de_fase_2, 69, 55);
+if (Tension <= Cambio_de_fase_2) conversion (Cambio_de_fase_2, Minima_Tension, 54, 0);
 }
 
-float redondeoPorcentaje(){
+void redondeoPorcentaje(){
 Porcentaje_redondeado = round (Porcentaje_bruto/10) * 10;
 }
 
-float llamarParaPorcentaje(){
+int llamarParaPorcentaje(){
 leerVoltajeBateria();
 voltajeAPorcentaje();
 redondeoPorcentaje();

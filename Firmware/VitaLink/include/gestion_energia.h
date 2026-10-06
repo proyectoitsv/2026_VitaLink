@@ -22,15 +22,17 @@
 void inicializarModulo();
 
 // Lee el ADC y convierte el valor entrante a uno apto para trabajar.
-float leerVoltajeBateria();
+void leerVoltajeBateria();
 
 // Convierte un voltaje real a porcentaje usando la curva LiPo.
-float voltajeAPorcentaje();
+void voltajeAPorcentaje();
 
 // Realiza el mapeo entre voltaje y porcentaje con sus respectivos valores maximos y minimos.
-float conversion ();
+void conversion ();
 
 // Recibe el porcentaje con decimales y lo redondea al múltiplo de 10 más cercano
-float redondeoPorcentaje();
+void redondeoPorcentaje();
 
+// Función que llama a las funciones necesarias para obtener el porcentaje de batería.
+int llamarParaPorcentaje();
 #endif // FIN DEL MODULO_ENERGIA_H
