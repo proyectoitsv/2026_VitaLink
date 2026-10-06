@@ -86,6 +86,7 @@ bool inicializarSensorBPM() {
     
     // Configuración de LEDs y ADC del max
     sensor.setup(150, 16, 2, 100, 411, 16384); 
+    sensor.setPulseAmplitudeRed(0); // Apagar luz roja visible inicialmente
     
     resetearVariablesBPM();
     return true;
@@ -104,14 +105,28 @@ int procesarLatidosBPM() {
         
         float valorActual = (float)ultimoIR;
 
+        static unsigned long tiempoDedoFuera = 0;
+
         if (valorActual <= UMBRAL_PULSERA_PUESTA) { 
-            pulseraPuesta = false;
-            resetearVariablesBPM();
+            if (pulseraPuesta) {
+                if (tiempoDedoFuera == 0) tiempoDedoFuera = millis();
+                
+                // Le damos medio segundo de tolerancia para ignorar ruidos o glitches del I2C
+                if (millis() - tiempoDedoFuera > 500) { 
+                    pulseraPuesta = false;
+                    sensor.setPulseAmplitudeRed(0); // Apagar luz roja visible
+                    resetearVariablesBPM();
+                    tiempoDedoFuera = 0;
+                }
+            }
             return -1; 
         }
 
+        tiempoDedoFuera = 0; // Hay buena lectura, reiniciamos el contador de apagado
+
         if (!pulseraPuesta) {
             pulseraPuesta = true;
+            sensor.setPulseAmplitudeRed(150); // Encender luz roja para SpO2
             tiempoInicioToque = millis();
             resetearVariablesBPM();
         }
@@ -172,6 +187,7 @@ int procesarLatidosBPM() {
         tiempoInicioVentanaBPM = millis();
     }
 
+    if (!pulseraPuesta) return -1;
     return bpmDefinitivo; 
 }
 
@@ -225,6 +241,7 @@ int procesarOxigenoSangre() {
         tiempoInicioVentanaSpO2 = millis();
     }
 
+    if (!pulseraPuesta) return -1;
     if (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS) return -1;
     
     return spo2Definitivo;
