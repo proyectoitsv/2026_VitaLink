@@ -25,10 +25,7 @@ static unsigned long tiempoUltimoLatido = 0;
 static int ultimosBPM[CANTIDAD_LATIDOS_FILTRO];
 static byte indiceBPM = 0;
 static int bpmPromedio = 0;
-static unsigned long tiempoInicioVentanaBPM = 0;
-static int sumaVentanaBPM = 0;
-static byte latidosEnVentana = 0;
-static int bpmDefinitivo = 0;
+static bool primerLatidoDetectado = false;
 
 static float maxIR = 0.0;
 static float minIR = 999999.0;
@@ -61,12 +58,9 @@ static void resetearVariablesBPM() {
     minimoLocal = 999999.0;
     bpmPromedio = 0;
     for (byte i = 0 ; i < CANTIDAD_LATIDOS_FILTRO ; i++) ultimosBPM[i] = 0;
-    sumaVentanaBPM = 0;
-    latidosEnVentana = 0;
-    bpmDefinitivo = 0;
     buscandoPico = true;
+    primerLatidoDetectado = false;
     tiempoUltimoLatido = millis();
-    tiempoInicioVentanaBPM = millis();
 
     maxIR = 0.0; minIR = 999999.0;
     maxRed = 0.0; minRed = 999999.0;
@@ -140,25 +134,29 @@ int procesarLatidosBPM() {
 
                 if (caida > CAIDA_MINIMA_IR && caida < RANGO_CAIDA_MAX_IR) { 
                     unsigned long tiempoAhora = millis();
-                    unsigned long intervalo = tiempoAhora - tiempoUltimoLatido;
+                    
+                    if (!primerLatidoDetectado) {
+                        // El primer pico solo sirve para encender el cronómetro, no para medir
+                        primerLatidoDetectado = true;
+                        tiempoUltimoLatido = tiempoAhora;
+                    } else {
+                        unsigned long intervalo = tiempoAhora - tiempoUltimoLatido;
 
-                    if (intervalo > MIN_INTERVALO_LATIDO_MS && intervalo < MAX_INTERVALO_LATIDO_MS) { 
-                        int bpmInstantaneo = 60000 / intervalo;
-                        if (bpmInstantaneo > MIN_BPM_VALIDO && bpmInstantaneo < MAX_BPM_VALIDO) {
-                            ultimosBPM[indiceBPM] = bpmInstantaneo;
-                            indiceBPM++;
-                            if (indiceBPM >= CANTIDAD_LATIDOS_FILTRO) indiceBPM = 0; 
-                            
-                            int suma = 0, datosValidos = 0;
-                            for (byte i = 0 ; i < CANTIDAD_LATIDOS_FILTRO ; i++) {
-                                if (ultimosBPM[i] != 0) { suma += ultimosBPM[i]; datosValidos++; }
+                        if (intervalo > MIN_INTERVALO_LATIDO_MS && intervalo < MAX_INTERVALO_LATIDO_MS) { 
+                            int bpmInstantaneo = 60000 / intervalo;
+                            if (bpmInstantaneo > MIN_BPM_VALIDO && bpmInstantaneo < MAX_BPM_VALIDO) {
+                                ultimosBPM[indiceBPM] = bpmInstantaneo;
+                                indiceBPM++;
+                                if (indiceBPM >= CANTIDAD_LATIDOS_FILTRO) indiceBPM = 0; 
+                                
+                                int suma = 0, datosValidos = 0;
+                                for (byte i = 0 ; i < CANTIDAD_LATIDOS_FILTRO ; i++) {
+                                    if (ultimosBPM[i] != 0) { suma += ultimosBPM[i]; datosValidos++; }
+                                }
+                                if (datosValidos > 0) bpmPromedio = suma / datosValidos; 
                             }
-                            if (datosValidos > 0) bpmPromedio = suma / datosValidos; 
-
-                            sumaVentanaBPM += bpmPromedio;
-                            latidosEnVentana++;
+                            tiempoUltimoLatido = tiempoAhora; 
                         }
-                        tiempoUltimoLatido = tiempoAhora; 
                     }
                     buscandoPico = false; 
                     minimoLocal = valorActual; 
@@ -178,17 +176,9 @@ int procesarLatidosBPM() {
         }
     }
 
-    if (millis() - tiempoInicioVentanaBPM >= TIEMPO_VENTANA_MS) {
-        if (latidosEnVentana > 0) bpmDefinitivo = sumaVentanaBPM / latidosEnVentana;
-        else bpmDefinitivo = bpmPromedio; 
-
-        sumaVentanaBPM = 0;
-        latidosEnVentana = 0;
-        tiempoInicioVentanaBPM = millis();
-    }
-
     if (!pulseraPuesta) return -1;
-    return bpmDefinitivo; 
+    if (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS) return -1;
+    return bpmPromedio; 
 }
 
 int procesarOxigenoSangre() {
