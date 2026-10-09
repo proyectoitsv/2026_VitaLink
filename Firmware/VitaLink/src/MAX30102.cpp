@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include "MAX30105.h"
 
-#define UMBRAL_PULSERA_PUESTA      50000
+#define UMBRAL_PULSERA_PUESTA      100000
 #define CAIDA_MINIMA_IR            20.0
 #define RANGO_CAIDA_MAX_IR         10000.0
 #define MIN_INTERVALO_LATIDO_MS    400
@@ -10,7 +10,7 @@
 #define MIN_BPM_VALIDO             40
 #define MAX_BPM_VALIDO             160
 #define CANTIDAD_LATIDOS_FILTRO    10
-#define TIEMPO_ESTABILIZACION_MS   1000
+#define TIEMPO_ESTABILIZACION_MS   5000
 #define TIEMPO_VENTANA_MS          2500
 
 static MAX30105 sensor;
@@ -113,7 +113,7 @@ int procesarLatidosBPM() {
                     tiempoDedoFuera = 0;
                 }
             }
-            return -1; 
+            return 0; 
         }
 
         tiempoDedoFuera = 0; // Hay buena lectura, reiniciamos el contador de apagado
@@ -176,8 +176,9 @@ int procesarLatidosBPM() {
         }
     }
 
-    if (!pulseraPuesta) return -1;
+    if (!pulseraPuesta) return 0;
     if (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS) return -1;
+    if (bpmPromedio == 0) return -1; // Aún no hay latidos válidos medidos
     return bpmPromedio; 
 }
 
@@ -193,7 +194,7 @@ int procesarOxigenoSangre() {
         float irActual = (float)ultimoIR;
         float redActual = (float)ultimoRed;
 
-        if (irActual <= UMBRAL_PULSERA_PUESTA) return -1;
+        if (irActual <= UMBRAL_PULSERA_PUESTA) return 0;
 
         if (irActual > maxIR) maxIR = irActual;
         if (irActual < minIR) minIR = irActual;
@@ -231,8 +232,9 @@ int procesarOxigenoSangre() {
         tiempoInicioVentanaSpO2 = millis();
     }
 
-    if (!pulseraPuesta) return -1;
+    if (!pulseraPuesta) return 0;
     if (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS) return -1;
+    if (spo2Definitivo == 0) return -1; // Aún no hay cálculo válido de oxígeno
     
     return spo2Definitivo;
 }
