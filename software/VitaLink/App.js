@@ -25,6 +25,7 @@ const decodeBase64 = (input) => {
 
 export default function App() {
   const [isScanning, setIsScanning] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [device, setDevice] = useState(null);
   const [connected, setConnected] = useState(false);
   const [bpm, setBpm] = useState('--');
@@ -44,51 +45,52 @@ export default function App() {
 
   const connectToDevice = async (foundDevice) => {
     try {
-      console.log('Conectando a:', foundDevice.name);
-      const connectedDevice = await bleManager.connectToDevice(foundDevice.id);
-      setConnected(true);
-      setDevice(connectedDevice);
-
-      console.log('Descubriendo servicios y características...');
+      setIsConnecting(true);
+      console.log('Estableciendo conexión física con:', foundDevice.id);
+      
+      const connectedDevice = await bleManager.connectToDevice(foundDevice.id, { autoConnect: false });
+      
+      console.log('Conexión física lograda. Solicitando MTU (GATT Patch)...');
+      try {
+        await connectedDevice.requestMTU(512);
+      } catch (mtuError) {
+        console.log('Aviso: El celular rechazó cambiar el MTU (normal en algunos Android).');
+      }
+      
+      console.log('Esperando estabilización (1.5s)...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      console.log('Descubriendo servicios y buzones internos...');
       await connectedDevice.discoverAllServicesAndCharacteristics();
       
+      setConnected(true);
+      setDevice(connectedDevice);
+      setIsConnecting(false);
+
       console.log('¡Conectado y listo! Suscribiendo a notificaciones...');
 
-      // Suscribirse al buzón de BPM
       connectedDevice.monitorCharacteristicForService(
         VITALINK_SERVICE_UUID, 
         BPM_CHAR_UUID, 
         (error, characteristic) => {
-          if (error) {
-            console.log('Error leyendo BPM:', error);
-            return;
-          }
-          if (characteristic?.value) {
-            const decodedBPM = decodeBase64(characteristic.value);
-            setBpm(decodedBPM);
+          if (!error && characteristic?.value) {
+            setBpm(decodeBase64(characteristic.value));
           }
         }
       );
 
-      // Suscribirse al buzón de SpO2
       connectedDevice.monitorCharacteristicForService(
         VITALINK_SERVICE_UUID, 
         SPO2_CHAR_UUID, 
         (error, characteristic) => {
-          if (error) {
-            console.log('Error leyendo SpO2:', error);
-            return;
-          }
-          if (characteristic?.value) {
-            const decodedSpo2 = decodeBase64(characteristic.value);
-            setSpo2(decodedSpo2);
+          if (!error && characteristic?.value) {
+            setSpo2(decodeBase64(characteristic.value));
           }
         }
       );
 
-      // Si se desconecta...
       connectedDevice.onDisconnected((error, disconnectedDevice) => {
-        console.log('Dispositivo desconectado');
+        console.log('Dispositivo desconectado (o la placa se reinició)');
         setConnected(false);
         setDevice(null);
         setBpm('--');
@@ -96,7 +98,8 @@ export default function App() {
       });
 
     } catch (error) {
-      console.log('Fallo al conectar:', error);
+      console.log('Fallo al conectar o al pedir servicios:', error);
+      setIsConnecting(false);
     }
   };
 
@@ -108,12 +111,13 @@ export default function App() {
     }
 
     setIsScanning(true);
+    setIsConnecting(false);
     setDevice(null);
     setConnected(false);
     setBpm('--');
     setSpo2('--');
 
-    console.log("Buscando pulsera VitaLink...");
+    console.log("Buscando pulsera por Nombre o por UUID...");
     
     bleManager.startDeviceScan(null, null, (error, scannedDevice) => {
       if (error) {
@@ -122,8 +126,12 @@ export default function App() {
         return;
       }
 
-      if (scannedDevice && scannedDevice.name === 'VitaLink') {
-        console.log("¡Encontrada!", scannedDevice.id);
+      const esVitaLinkPorNombre = scannedDevice.name === 'VitaLink' || scannedDevice.localName === 'VitaLink';
+      const esVitaLinkPorUUID = scannedDevice.serviceUUIDs && scannedDevice.serviceUUIDs.includes(VITALINK_SERVICE_UUID.toLowerCase());
+      const esVitaLinkPorMAC = scannedDevice.id === '1E:CE:60:36:36:C8';
+
+      if (esVitaLinkPorNombre || esVitaLinkPorUUID || esVitaLinkPorMAC) {
+        console.log("¡🎉 Pulsera VitaLink Encontrada!", scannedDevice.id);
         bleManager.stopDeviceScan();
         setIsScanning(false);
         connectToDevice(scannedDevice);
@@ -132,8 +140,11 @@ export default function App() {
 
     setTimeout(() => {
       bleManager.stopDeviceScan();
-      setIsScanning(false);
-    }, 10000);
+      if (!isConnecting && !connected) {
+         setIsScanning(false);
+         console.log("Fin del escaneo por tiempo límite.");
+      }
+    }, 15000);
   };
 
   const disconnect = async () => {
@@ -148,7 +159,7 @@ export default function App() {
       
       <View style={styles.card}>
         <Text style={styles.status}>
-          Estado: {connected ? "🟢 Conectado" : (isScanning ? "🔎 Buscando..." : "🔴 Desconectado")}
+          Estado: {connected ? "🟢 Conectado" : (isConnecting ? "🔌 Conectando..." : (isScanning ? "🔎 Buscando..." : "🔴 Desconectado"))}
         </Text>
         
         {connected && (
@@ -167,9 +178,9 @@ export default function App() {
 
       {!connected ? (
         <Button 
-          title={isScanning ? "Escaneando..." : "Conectar Pulsera"} 
+          title={isConnecting ? "Conectando..." : (isScanning ? "Escaneando..." : "Conectar Pulsera")} 
           onPress={startScan} 
-          disabled={isScanning} 
+          disabled={isScanning || isConnecting} 
         />
       ) : (
         <Button 
