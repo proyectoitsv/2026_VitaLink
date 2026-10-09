@@ -2,37 +2,44 @@
 #include "servidor_ble.h"
 
 unsigned long tiempoAnterior = 0;
+unsigned long tiempoConexion = 0;
 bool estadoAlterno = false;
+bool estabaConectado = false;
 
 void setup() {
   Serial.begin(115200);
   inicializarBLE();
-  Serial.println("Servidor BLE Iniciado. Esperando conexion...");
 }
 
 void loop() {
   manejarDesconexionBLE();
 
   if (dispositivoConectado) {
-    if (millis() - tiempoAnterior >= 1000) {
-      tiempoAnterior = millis();
-      
-      int bpm_test = random(60, 100);
-      int spo2_test = random(95, 100);
-      int bateria_test = random(10, 100);
-      
-      // Enviamos datos de salud cada segundo
-      enviarLatidosBLE(bpm_test);
-      enviarOxigenoBLE(spo2_test);
-      enviarBateriaBLE(bateria_test);
-      
-      // Simulamos que hay una caida o SOS alternando valores para probar los 5 buzones
-      estadoAlterno = !estadoAlterno;
-      enviarAlertaCaidaBLE(estadoAlterno);
-      enviarAlertaSOSBLE(!estadoAlterno);
-      
-      Serial.printf("Enviando -> BPM:%d | SpO2:%d | Bat:%d | Caida:%d | SOS:%d\n", 
-                    bpm_test, spo2_test, bateria_test, estadoAlterno, !estadoAlterno);
+    if (!estabaConectado) {
+      estabaConectado = true;
+      tiempoConexion = millis();
     }
+
+    // Esperar 4 segundos despues de conectar antes de mandar notificaciones 
+    // para dejar que el celular negocie el MTU y descubra los servicios sin saturarse.
+    if (millis() - tiempoConexion > 4000) {
+      if (millis() - tiempoAnterior >= 2000) { // Mandar cada 2 segundos para no saturar
+        tiempoAnterior = millis();
+        
+        int bpm_test = random(60, 100);
+        int spo2_test = random(95, 100);
+        int bateria_test = random(10, 100);
+        
+        enviarLatidosBLE(bpm_test);
+        enviarOxigenoBLE(spo2_test);
+        enviarBateriaBLE(bateria_test);
+        
+        estadoAlterno = !estadoAlterno;
+        enviarAlertaCaidaBLE(estadoAlterno);
+        enviarAlertaSOSBLE(!estadoAlterno);
+      }
+    }
+  } else {
+    estabaConectado = false;
   }
 }
