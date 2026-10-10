@@ -2,7 +2,7 @@
  * Archivo: adquisicion_movimiento_filtrado.cpp
  * Descripcion: IMPLEMENTACION. Lectura del MPU6050 (solo acelerometro) con Wire,
  * calibracion de gravedad (|a| = 1G en reposo) y filtro pasa-bajos exponencial.
- * Todo sin delay(): el muestreo se controla con millis().
+ * Sin retardos bloqueantes: el muestreo se controla con millis().
  */
 
 #include "adquisicion_movimiento_filtrado.h"
@@ -17,6 +17,7 @@
 #define PIN_I2C_SDA                 SDA        // Pines por defecto de la XIAO. Cambiar si la PCB usa otros
 #define PIN_I2C_SCL                 SCL
 #define I2C_FRECUENCIA_HZ           400000UL
+#define I2C_EXITO                   0          // Codigo que devuelve endTransmission() si todo salio bien
 
 // --- Registros del MPU6050 ---
 #define MPU_DIRECCION_I2C           0x68
@@ -32,11 +33,13 @@
 #define MPU_LSB_POR_G               4096.0f    // Sensibilidad en +-8G
 #define MPU_BYTES_ACELERACION       6          // 2 bytes por eje (X, Y, Z)
 #define MPU_TIEMPO_ARRANQUE_MS      100        // Espera (sin bloquear) despues de despertarlo
+#define MPU_BYTES_REGISTRO          1          // Un registro simple ocupa 1 byte
 #define BITS_POR_BYTE               8
 
 // --- Muestreo y filtro ---
 #define INTERVALO_MUESTREO_MS       10         // 100 Hz
 #define FILTRO_ALFA                 0.25f      // 0 a 1. Mas chico = mas suave pero mas lento (~5 Hz de corte a 100 Hz)
+#define FILTRO_PESO_TOTAL           1.0f       // alfa + (1 - alfa) siempre suma 1
 #define FALLAS_LECTURA_MAX          5          // Lecturas seguidas fallidas antes de dar el sensor por caido
 
 // --- Calibracion de gravedad ---
@@ -44,6 +47,7 @@
 #define CAL_RUIDO_MAX_G             0.15f      // Si |a| varia mas que esto, se estaba moviendo: reinicia
 #define CAL_DESVIO_MAX_G            0.20f      // Si |a| promedio se aleja mas que esto de 1G, algo anda mal
 #define GRAVEDAD_OBJETIVO_G         1.0f
+#define FACTOR_ESCALA_NEUTRO        1.0f       // Sin calibrar: no corrige nada
 
 // ---------------------------------------------------------
 // VARIABLES PRIVADAS
@@ -58,7 +62,7 @@ static uint32_t          proxima_lectura_ms   = 0;
 static uint8_t           fallas_consecutivas  = 0;
 
 static EstadoCalibracion estado_calibracion   = CAL_EN_CURSO;
-static float             factor_escala        = 1.0f;
+static float             factor_escala        = FACTOR_ESCALA_NEUTRO;
 static uint16_t          cal_contador         = 0;
 static float             cal_suma             = 0.0f;
 static float             cal_minimo           = 0.0f;
@@ -79,16 +83,16 @@ static bool escribirRegistro(uint8_t registro, uint8_t valor) {
     Wire.beginTransmission(MPU_DIRECCION_I2C);
     Wire.write(registro);
     Wire.write(valor);
-    return (Wire.endTransmission() == 0);
+    return (Wire.endTransmission() == I2C_EXITO);
 }
 
 static bool leerRegistro(uint8_t registro, uint8_t* valor) {
     Wire.beginTransmission(MPU_DIRECCION_I2C);
     Wire.write(registro);
-    if (Wire.endTransmission(false) != 0) {
+    if (Wire.endTransmission(false) != I2C_EXITO) {
         return false;
     }
-    if (Wire.requestFrom((uint8_t)MPU_DIRECCION_I2C, (uint8_t)1) != 1) {
+    if (Wire.requestFrom((uint8_t)MPU_DIRECCION_I2C, (uint8_t)MPU_BYTES_REGISTRO) != MPU_BYTES_REGISTRO) {
         return false;
     }
     *valor = Wire.read();
@@ -106,7 +110,7 @@ static bool configurarSensor() {
     if (!escribirRegistro(MPU_REG_CONFIG, MPU_VALOR_DLPF_94HZ))     { return false; }
     if (!escribirRegistro(MPU_REG_ACCEL_CONFIG, MPU_VALOR_RANGO_8G)) { return false; }
 
-    // El sensor necesita un rato para estabilizarse: en vez de delay, se posterga la primera lectura.
+    // El sensor necesita un rato para estabilizarse: sin bloquear, se posterga la primera lectura.
     proxima_lectura_ms  = millis() + MPU_TIEMPO_ARRANQUE_MS;
     fallas_consecutivas = 0;
     return true;
@@ -116,7 +120,7 @@ static bool configurarSensor() {
 static bool leerAceleracionG(float* x, float* y, float* z) {
     Wire.beginTransmission(MPU_DIRECCION_I2C);
     Wire.write(MPU_REG_ACCEL_XOUT_H);
-    if (Wire.endTransmission(false) != 0) {
+    if (Wire.endTransmission(false) != I2C_EXITO) {
         return false;
     }
     if (Wire.requestFrom((uint8_t)MPU_DIRECCION_I2C, (uint8_t)MPU_BYTES_ACELERACION) != MPU_BYTES_ACELERACION) {
@@ -179,7 +183,7 @@ float calcularMagnitud(float x, float y, float z) {
 
 // Filtro exponencial: salida = alfa * nueva + (1 - alfa) * anterior
 float aplicarFiltroExponencial(float muestra_nueva, float valor_anterior, float alfa) {
-    return (alfa * muestra_nueva) + ((1.0f - alfa) * valor_anterior);
+    return (alfa * muestra_nueva) + ((FILTRO_PESO_TOTAL - alfa) * valor_anterior);
 }
 
 // ---------------------------------------------------------
