@@ -40,5 +40,6 @@ DatosMovimiento actualizarMovimiento();
 
 // Funciones matematicas puras (no tocan hardware, se pueden probar en un compilador online).
 float calcularMagnitud(float x, float y, float z);
+float aplicarFiltroExponencial(float muestra_nueva, float valor_anterior, float alfa);
 
 #endif // ADQUISICION_MOVIMIENTO_FILTRADO_H

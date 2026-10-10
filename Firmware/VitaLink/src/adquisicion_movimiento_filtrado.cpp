@@ -1,7 +1,7 @@
 /*
  * Archivo: adquisicion_movimiento_filtrado.cpp
  * Descripcion: IMPLEMENTACION. Lectura del MPU6050 (solo acelerometro) con Wire,
- * y calibracion de gravedad (|a| = 1G en reposo).
+ * calibracion de gravedad (|a| = 1G en reposo) y filtro pasa-bajos exponencial.
  * Todo sin delay(): el muestreo se controla con millis().
  */
 
@@ -36,6 +36,7 @@
 
 // --- Muestreo y filtro ---
 #define INTERVALO_MUESTREO_MS       10         // 100 Hz
+#define FILTRO_ALFA                 0.25f      // 0 a 1. Mas chico = mas suave pero mas lento (~5 Hz de corte a 100 Hz)
 #define FALLAS_LECTURA_MAX          5          // Lecturas seguidas fallidas antes de dar el sensor por caido
 
 // --- Calibracion de gravedad ---
@@ -62,6 +63,11 @@ static uint16_t          cal_contador         = 0;
 static float             cal_suma             = 0.0f;
 static float             cal_minimo           = 0.0f;
 static float             cal_maximo           = 0.0f;
+
+static bool              filtro_inicializado  = false;
+static float             filtro_x             = 0.0f;
+static float             filtro_y             = 0.0f;
+static float             filtro_z             = 0.0f;
 
 static DatosMovimiento   ultimo_dato          = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, false, false};
 
@@ -171,6 +177,11 @@ float calcularMagnitud(float x, float y, float z) {
     return sqrtf((x * x) + (y * y) + (z * z));
 }
 
+// Filtro exponencial: salida = alfa * nueva + (1 - alfa) * anterior
+float aplicarFiltroExponencial(float muestra_nueva, float valor_anterior, float alfa) {
+    return (alfa * muestra_nueva) + ((1.0f - alfa) * valor_anterior);
+}
+
 // ---------------------------------------------------------
 // FUNCIONES PUBLICAS
 // ---------------------------------------------------------
@@ -179,6 +190,7 @@ bool inicializarMovimiento() {
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
     Wire.setClock(I2C_FRECUENCIA_HZ);
 
+    filtro_inicializado = false;
     sensor_ok           = configurarSensor();
     iniciarCalibracionMovimiento();
     return sensor_ok;
@@ -229,11 +241,23 @@ DatosMovimiento actualizarMovimiento() {
     y *= factor_escala;
     z *= factor_escala;
 
-    ultimo_dato.x                 = x;
-    ultimo_dato.y                 = y;
-    ultimo_dato.z                 = z;
+    // Filtro pasa-bajos (la primera muestra arranca el filtro para que no parta desde 0).
+    if (!filtro_inicializado) {
+        filtro_x = x;
+        filtro_y = y;
+        filtro_z = z;
+        filtro_inicializado = true;
+    } else {
+        filtro_x = aplicarFiltroExponencial(x, filtro_x, FILTRO_ALFA);
+        filtro_y = aplicarFiltroExponencial(y, filtro_y, FILTRO_ALFA);
+        filtro_z = aplicarFiltroExponencial(z, filtro_z, FILTRO_ALFA);
+    }
+
+    ultimo_dato.x                 = filtro_x;
+    ultimo_dato.y                 = filtro_y;
+    ultimo_dato.z                 = filtro_z;
     ultimo_dato.magnitud_cruda    = calcularMagnitud(x, y, z);
-    ultimo_dato.magnitud_filtrada = calcularMagnitud(x, y, z);
+    ultimo_dato.magnitud_filtrada = calcularMagnitud(filtro_x, filtro_y, filtro_z);
     ultimo_dato.muestra_nueva     = true;
     ultimo_dato.calibrado         = (estado_calibracion == CAL_LISTA);
     ultimo_dato.sensor_ok         = sensor_ok;
