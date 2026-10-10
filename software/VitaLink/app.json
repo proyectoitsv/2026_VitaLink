@@ -21,13 +21,15 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
       ],
-      "package": "com.anonymous.VitaLink"
+      "package": "com.anonymous.VitaLink",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-dev-client",
+      "@react-native-firebase/app",
       [
         "react-native-ble-plx",
         {

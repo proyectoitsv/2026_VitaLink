@@ -1,6 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, Button, PermissionsAndroid, Platform } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
+import { getFirestore, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
+
+const auth = getAuth();
+const db = getFirestore();
+
+
+
 
 // UUIDs del Servidor BLE en C++
 const VITALINK_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
@@ -12,7 +20,6 @@ const SOS_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26ac';
 
 const bleManager = new BleManager();
 
-// Utilidad para decodificar Base64 a texto
 const decodeBase64 = (input) => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   let str = input.replace(/=+$/, '');
@@ -27,17 +34,76 @@ const decodeBase64 = (input) => {
 };
 
 export default function App() {
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
   const [isScanning, setIsScanning] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [device, setDevice] = useState(null);
   const [connected, setConnected] = useState(false);
   
-  // Estados para los 5 buzones
   const [bpm, setBpm] = useState('--');
   const [spo2, setSpo2] = useState('--');
   const [bateria, setBateria] = useState('--');
   const [alertaCaida, setAlertaCaida] = useState('0');
   const [alertaSOS, setAlertaSOS] = useState('0');
+  
+  const [ultimaSync, setUltimaSync] = useState('--:--:--');
+  const datosRef = useRef({ bpm: '--', spo2: '--', bateria: '--', alertaCaida: '0', alertaSOS: '0' });
+
+  useEffect(() => {
+    const subscriber = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      if (initializing) setInitializing(false);
+    });
+    return subscriber;
+  }, []);
+
+  // Sincronización con Firebase Firestore cada 10 segundos
+  useEffect(() => {
+    if (!connected || !user) return;
+    
+    const interval = setInterval(async () => {
+      const data = datosRef.current;
+      // Solo guardar si recibimos latidos válidos
+      if (data.bpm !== '--' || data.spo2 !== '--') {
+        try {
+          await addDoc(collection(db, 'pacientes', user.uid, 'historial_signos'), {
+            bpm: data.bpm,
+            spo2: data.spo2,
+            bateria: data.bateria,
+            alertaCaida: data.alertaCaida,
+            alertaSOS: data.alertaSOS,
+            timestamp: serverTimestamp()
+          });
+          const now = new Date();
+          setUltimaSync(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+        } catch (error) {
+          console.error("Error guardando en Firestore:", error);
+        }
+      }
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [connected, user]);
+
+  const loginAnonymously = async () => {
+    try {
+      setIsLoggingIn(true);
+      await signInAnonymously(auth);
+    } catch (e) {
+      console.error(e);
+      alert('Error al iniciar sesión: ' + e.message);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const logout = async () => {
+    disconnect();
+    await signOut(auth);
+  };
 
   const requestPermissions = async () => {
     if (Platform.OS === 'android') {
@@ -54,63 +120,68 @@ export default function App() {
   const connectToDevice = async (foundDevice) => {
     try {
       setIsConnecting(true);
-      console.log('Estableciendo conexión física con:', foundDevice.id);
-      
       const connectedDevice = await bleManager.connectToDevice(foundDevice.id, { autoConnect: false });
       
-      console.log('Conexión física lograda. Solicitando MTU (GATT Patch)...');
-      try {
-        await connectedDevice.requestMTU(512);
-      } catch (mtuError) {
-        console.log('Aviso: El celular rechazó cambiar el MTU.');
-      }
-      
-      console.log('Esperando estabilización (1.5s)...');
+      try { await connectedDevice.requestMTU(512); } catch (e) {}
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      console.log('Descubriendo servicios y buzones internos...');
       await connectedDevice.discoverAllServicesAndCharacteristics();
       
       setConnected(true);
       setDevice(connectedDevice);
       setIsConnecting(false);
 
-      console.log('¡Conectado y listo! Suscribiendo a notificaciones (BPM, SpO2, Bat, Caída, SOS)...');
-
-      // 1. Suscribirse a BPM
       connectedDevice.monitorCharacteristicForService(VITALINK_SERVICE_UUID, BPM_CHAR_UUID, (error, characteristic) => {
-          if (!error && characteristic?.value) setBpm(decodeBase64(characteristic.value));
+          if (!error && characteristic?.value) {
+            const val = decodeBase64(characteristic.value);
+            setBpm(val);
+            datosRef.current.bpm = val;
+          }
       });
-
-      // 2. Suscribirse a SpO2
       connectedDevice.monitorCharacteristicForService(VITALINK_SERVICE_UUID, SPO2_CHAR_UUID, (error, characteristic) => {
-          if (!error && characteristic?.value) setSpo2(decodeBase64(characteristic.value));
+          if (!error && characteristic?.value) {
+            const val = decodeBase64(characteristic.value);
+            setSpo2(val);
+            datosRef.current.spo2 = val;
+          }
       });
-
-      // 3. Suscribirse a Batería
       connectedDevice.monitorCharacteristicForService(VITALINK_SERVICE_UUID, BAT_CHAR_UUID, (error, characteristic) => {
-          if (!error && characteristic?.value) setBateria(decodeBase64(characteristic.value));
+          if (!error && characteristic?.value) {
+            const val = decodeBase64(characteristic.value);
+            setBateria(val);
+            datosRef.current.bateria = val;
+          }
       });
-
-      // 4. Suscribirse a Alerta de Caída
       connectedDevice.monitorCharacteristicForService(VITALINK_SERVICE_UUID, CAIDA_CHAR_UUID, (error, characteristic) => {
-          if (!error && characteristic?.value) setAlertaCaida(decodeBase64(characteristic.value));
+          if (!error && characteristic?.value) {
+            const val = decodeBase64(characteristic.value);
+            setAlertaCaida(val);
+            datosRef.current.alertaCaida = val;
+            
+            // Subida inmediata en caso de emergencia
+            if (val === '1' && user) {
+              addDoc(collection(db, 'pacientes', user.uid, 'alertas_criticas'), { tipo: 'CAIDA', timestamp: serverTimestamp() }).then(() => { const now = new Date(); setUltimaSync(now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0')); }).catch(()=>{});
+            }
+          }
       });
-
-      // 5. Suscribirse a SOS
       connectedDevice.monitorCharacteristicForService(VITALINK_SERVICE_UUID, SOS_CHAR_UUID, (error, characteristic) => {
-          if (!error && characteristic?.value) setAlertaSOS(decodeBase64(characteristic.value));
+          if (!error && characteristic?.value) {
+            const val = decodeBase64(characteristic.value);
+            setAlertaSOS(val);
+            datosRef.current.alertaSOS = val;
+            
+            // Subida inmediata en caso de emergencia
+            if (val === '1' && user) {
+              addDoc(collection(db, 'pacientes', user.uid, 'alertas_criticas'), { tipo: 'SOS', timestamp: serverTimestamp() }).then(() => { const now = new Date(); setUltimaSync(now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0')); }).catch(()=>{});
+            }
+          }
       });
 
-      connectedDevice.onDisconnected((error, disconnectedDevice) => {
-        console.log('Dispositivo desconectado');
+      connectedDevice.onDisconnected(() => {
         setConnected(false);
         setDevice(null);
-        setBpm('--');
-        setSpo2('--');
-        setBateria('--');
-        setAlertaCaida('0');
-        setAlertaSOS('0');
+        setBpm('--'); setSpo2('--'); setBateria('--');
+        setAlertaCaida('0'); setAlertaSOS('0');
       });
 
     } catch (error) {
@@ -125,19 +196,10 @@ export default function App() {
 
     setIsScanning(true);
     setIsConnecting(false);
-    setDevice(null);
-    setConnected(false);
-    setBpm('--');
-    setSpo2('--');
-    setBateria('--');
-    setAlertaCaida('0');
-    setAlertaSOS('0');
     
     bleManager.startDeviceScan(null, null, (error, scannedDevice) => {
-      if (error) {
-        setIsScanning(false);
-        return;
-      }
+      if (error) { setIsScanning(false); return; }
+      
       const esVitaLink = (scannedDevice.name === 'VitaLink') || 
                          (scannedDevice.localName === 'VitaLink') || 
                          (scannedDevice.serviceUUIDs && scannedDevice.serviceUUIDs.includes(VITALINK_SERVICE_UUID.toLowerCase())) ||
@@ -160,19 +222,36 @@ export default function App() {
     if (device) await bleManager.cancelDeviceConnection(device.id);
   };
 
+  if (initializing) return null;
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Proyecto VitaLink</Text>
+        <Text style={styles.subtitle}>Acceso Médico Seguro</Text>
+        <View style={{ marginTop: 50 }}>
+          <Button title={isLoggingIn ? "Ingresando..." : "Ingresar como Paciente"} onPress={loginAnonymously} disabled={isLoggingIn} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Proyecto VitaLink</Text>
+      <View style={styles.header}>
+        <Text style={styles.titleSmall}>VitaLink</Text>
+        <Button title="Cerrar Sesión" color="#ff5252" onPress={logout} />
+      </View>
+      
+      <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}><Text style={styles.uid}>ID: {user.uid.substring(0, 8)}</Text><Text style={[styles.uid, { color: '#005b9f', fontWeight: 'bold' }]}>Nube: {ultimaSync}</Text></View>
       
       <View style={styles.card}>
         <Text style={styles.status}>
-          Estado: {connected ? "🟢 Conectado" : (isConnecting ? "🔌 Conectando..." : (isScanning ? "🔎 Buscando..." : "🔴 Desconectado"))}
+          {connected ? "🟢 Pulsera Conectada" : (isConnecting ? "🔌 Conectando..." : (isScanning ? "🔎 Buscando..." : "🔴 Desconectada"))}
         </Text>
         
         {connected && (
           <View style={styles.dashboard}>
-            
-            {/* Fila 1: Signos Vitales */}
             <View style={styles.row}>
               <View style={styles.dataBox}>
                 <Text style={styles.dataLabel}>Latidos</Text>
@@ -183,16 +262,12 @@ export default function App() {
                 <Text style={styles.dataValue}>{spo2} <Text style={styles.unit}>%</Text></Text>
               </View>
             </View>
-
-            {/* Fila 2: Batería */}
             <View style={styles.row}>
               <View style={[styles.dataBox, {width: '100%', backgroundColor: '#e8f5e9'}]}>
                 <Text style={styles.dataLabel}>Batería de la Pulsera</Text>
                 <Text style={[styles.dataValue, {color: '#2e7d32'}]}>{bateria}%</Text>
               </View>
             </View>
-
-            {/* Fila 3: Alertas */}
             <View style={styles.row}>
               <View style={[styles.dataBox, alertaCaida === '1' ? styles.alertActive : styles.alertInactive]}>
                 <Text style={styles.dataLabel}>Caída</Text>
@@ -203,7 +278,6 @@ export default function App() {
                 <Text style={styles.dataValue}>{alertaSOS === '1' ? '¡SÍ!' : 'NO'}</Text>
               </View>
             </View>
-
           </View>
         )}
       </View>
@@ -211,7 +285,7 @@ export default function App() {
       {!connected ? (
         <Button title={isConnecting ? "Conectando..." : (isScanning ? "Escaneando..." : "Conectar Pulsera")} onPress={startScan} disabled={isScanning || isConnecting} />
       ) : (
-        <Button title="Desconectar" color="red" onPress={disconnect} />
+        <Button title="Desconectar" color="#757575" onPress={disconnect} />
       )}
     </View>
   );
@@ -219,7 +293,11 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#005b9f', marginBottom: 40 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 10, marginTop: 40 },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#005b9f' },
+  titleSmall: { fontSize: 22, fontWeight: 'bold', color: '#005b9f' },
+  subtitle: { fontSize: 16, color: '#555', marginTop: 10 },
+  uid: { fontSize: 12, color: '#999', marginBottom: 20, alignSelf: 'flex-start' },
   card: { backgroundColor: 'white', padding: 20, borderRadius: 15, width: '100%', alignItems: 'center', marginBottom: 30, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
   status: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 20 },
   dashboard: { width: '100%', gap: 10 },
@@ -229,7 +307,7 @@ const styles = StyleSheet.create({
   dataValue: { fontSize: 32, fontWeight: 'bold', color: '#005b9f' },
   unit: { fontSize: 16, color: '#005b9f' },
   alertInactive: { backgroundColor: '#f5f5f5' },
-  alertActive: { backgroundColor: '#ffebee' }, // Rojo claro para caída
-  alertActiveSOS: { backgroundColor: '#ffcdd2' } // Rojo más intenso para SOS
+  alertActive: { backgroundColor: '#ffebee' }, 
+  alertActiveSOS: { backgroundColor: '#ffcdd2' } 
 });
 
