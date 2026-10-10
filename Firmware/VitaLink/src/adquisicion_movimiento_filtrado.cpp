@@ -38,15 +38,32 @@
 #define INTERVALO_MUESTREO_MS       10         // 100 Hz
 #define FALLAS_LECTURA_MAX          5          // Lecturas seguidas fallidas antes de dar el sensor por caido
 
+// --- Calibracion de gravedad ---
+#define CAL_MUESTRAS                100        // 1 segundo quieto a 100 Hz
+#define CAL_RUIDO_MAX_G             0.15f      // Si |a| varia mas que esto, se estaba moviendo: reinicia
+#define CAL_DESVIO_MAX_G            0.20f      // Si |a| promedio se aleja mas que esto de 1G, algo anda mal
+#define GRAVEDAD_OBJETIVO_G         1.0f
 
 // ---------------------------------------------------------
 // VARIABLES PRIVADAS
 // ---------------------------------------------------------
+typedef enum {
+    CAL_EN_CURSO,
+    CAL_LISTA
+} EstadoCalibracion;
+
 static bool              sensor_ok            = false;
 static uint32_t          proxima_lectura_ms   = 0;
 static uint8_t           fallas_consecutivas  = 0;
 
-static DatosMovimiento   ultimo_dato          = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, false};
+static EstadoCalibracion estado_calibracion   = CAL_EN_CURSO;
+static float             factor_escala        = 1.0f;
+static uint16_t          cal_contador         = 0;
+static float             cal_suma             = 0.0f;
+static float             cal_minimo           = 0.0f;
+static float             cal_maximo           = 0.0f;
+
+static DatosMovimiento   ultimo_dato          = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, false, false};
 
 // ---------------------------------------------------------
 // FUNCIONES PRIVADAS (hardware y calibracion)
@@ -110,6 +127,42 @@ static bool leerAceleracionG(float* x, float* y, float* z) {
     return true;
 }
 
+static void reiniciarAcumuladoresCalibracion() {
+    cal_contador = 0;
+    cal_suma     = 0.0f;
+    cal_minimo   = 0.0f;
+    cal_maximo   = 0.0f;
+}
+
+// Va juntando muestras en reposo. Al terminar calcula el factor que deja |a| = 1G exacto.
+// Se usa la magnitud (no cada eje) para que no importe como este puesta la muneca.
+static void procesarCalibracion(float magnitud) {
+    if (cal_contador == 0) {
+        cal_minimo = magnitud;
+        cal_maximo = magnitud;
+    }
+    cal_suma += magnitud;
+    cal_contador++;
+    if (magnitud < cal_minimo) { cal_minimo = magnitud; }
+    if (magnitud > cal_maximo) { cal_maximo = magnitud; }
+
+    // Se movio durante la calibracion: se descarta y se empieza de nuevo.
+    if ((cal_maximo - cal_minimo) > CAL_RUIDO_MAX_G) {
+        reiniciarAcumuladoresCalibracion();
+        return;
+    }
+
+    if (cal_contador >= CAL_MUESTRAS) {
+        float promedio = cal_suma / cal_contador;
+        if (fabsf(promedio - GRAVEDAD_OBJETIVO_G) <= CAL_DESVIO_MAX_G) {
+            factor_escala       = GRAVEDAD_OBJETIVO_G / promedio;
+            estado_calibracion  = CAL_LISTA;
+        } else {
+            reiniciarAcumuladoresCalibracion();
+        }
+    }
+}
+
 // ---------------------------------------------------------
 // FUNCIONES MATEMATICAS PURAS
 // ---------------------------------------------------------
@@ -127,7 +180,13 @@ bool inicializarMovimiento() {
     Wire.setClock(I2C_FRECUENCIA_HZ);
 
     sensor_ok           = configurarSensor();
+    iniciarCalibracionMovimiento();
     return sensor_ok;
+}
+
+void iniciarCalibracionMovimiento() {
+    estado_calibracion = CAL_EN_CURSO;
+    reiniciarAcumuladoresCalibracion();
 }
 
 DatosMovimiento actualizarMovimiento() {
@@ -160,12 +219,23 @@ DatosMovimiento actualizarMovimiento() {
     }
     fallas_consecutivas = 0;
 
+    // La calibracion se hace con el dato sin corregir.
+    if (estado_calibracion == CAL_EN_CURSO) {
+        procesarCalibracion(calcularMagnitud(x, y, z));
+    }
+
+    // Correccion de escala: deja la gravedad en 1G exacto.
+    x *= factor_escala;
+    y *= factor_escala;
+    z *= factor_escala;
+
     ultimo_dato.x                 = x;
     ultimo_dato.y                 = y;
     ultimo_dato.z                 = z;
     ultimo_dato.magnitud_cruda    = calcularMagnitud(x, y, z);
     ultimo_dato.magnitud_filtrada = calcularMagnitud(x, y, z);
     ultimo_dato.muestra_nueva     = true;
+    ultimo_dato.calibrado         = (estado_calibracion == CAL_LISTA);
     ultimo_dato.sensor_ok         = sensor_ok;
     return ultimo_dato;
 }

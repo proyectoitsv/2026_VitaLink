@@ -18,6 +18,7 @@ typedef struct {
     float magnitud_cruda;     // |a| SIN filtrar (sirve para detectar el pico del impacto)
     float magnitud_filtrada;  // |a| filtrada (sirve para caida libre e inmovilidad)
     bool  muestra_nueva;      // true solo si en esta llamada se leyo una muestra nueva
+    bool  calibrado;          // true cuando la calibracion de gravedad termino
     bool  sensor_ok;          // false si el MPU6050 no responde por I2C
 } DatosMovimiento;
 
@@ -28,6 +29,10 @@ typedef struct {
 // Inicia I2C, despierta el MPU6050 y arranca la calibracion. Devuelve true si el sensor respondio.
 // Si devuelve false no pasa nada grave: actualizarMovimiento() reintenta sola.
 bool inicializarMovimiento();
+
+// Reinicia la calibracion de gravedad. La pulsera tiene que estar quieta ~1 segundo.
+// (Ej: llamarla cuando esta en el cargador.)
+void iniciarCalibracionMovimiento();
 
 // Se llama seguido desde la tarea. No bloquea: si todavia no toca muestrear,
 // devuelve el ultimo dato con muestra_nueva = false.
