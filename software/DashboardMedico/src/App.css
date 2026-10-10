@@ -1,0 +1,195 @@
+:root {
+  --primary: #005b9f;
+  --bg: #f0f4f8;
+  --card-bg: #ffffff;
+  --text: #333333;
+  --danger: #d32f2f;
+  --danger-light: #ffebee;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+.dashboard-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e1e8ed;
+}
+
+.header h1 {
+  margin: 0;
+  color: var(--primary);
+}
+
+.status-badge {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.status-badge.online {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-badge.offline {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 30px;
+}
+
+.panel {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.panel h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 1.2rem;
+  color: #555;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.empty-state {
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* Alertas */
+.alertas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.alerta-card {
+  background-color: var(--danger-light);
+  border-left: 4px solid var(--danger);
+  padding: 15px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.alerta-icono {
+  font-size: 24px;
+}
+
+.alerta-info strong {
+  color: var(--danger);
+  display: block;
+  font-size: 16px;
+}
+
+.alerta-info p {
+  margin: 5px 0 0 0;
+  font-size: 14px;
+}
+
+.alerta-info small {
+  color: #666;
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+.blinking {
+  animation: blink 1.5s infinite;
+}
+
+/* Pacientes */
+.pacientes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.paciente-card {
+  border: 1px solid #e1e8ed;
+  border-radius: 10px;
+  padding: 15px;
+  background: #f8fafc;
+}
+
+.paciente-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.paciente-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.bateria {
+  font-size: 12px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+
+.signos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.signo {
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.signo-valor {
+  display: block;
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+.signo-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.paciente-footer {
+  text-align: center;
+  color: #999;
+  font-size: 11px;
+}
