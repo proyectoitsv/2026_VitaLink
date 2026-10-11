@@ -19,9 +19,11 @@
       "permissions": [
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT"
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.CAMERA"
       ],
       "package": "com.anonymous.VitaLink",
+      "largeHeap": true,
       "googleServicesFile": "./google-services.json"
     },
     "web": {

@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, StatusBar } from 'react-native';
 import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
-export default function FamilyLoginScreen({ navigation }) {
+export default function FamilyLoginScreen({ navigation, route }) {
   const [patientId, setPatientId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (route.params?.scannedCode) {
+      setPatientId(route.params.scannedCode);
+      // Opcionalmente podemos disparar el auto-login acá
+    }
+  }, [route.params?.scannedCode]);
 
   const handleLogin = async () => {
     if (patientId.length !== 8) {
@@ -77,6 +84,15 @@ export default function FamilyLoginScreen({ navigation }) {
             <Text style={styles.buttonText}>{loading ? 'Verificando...' : 'Comenzar a Monitorear'}</Text>
             {!loading && <MaterialCommunityIcons name="arrow-right" size={20} color="#FFF" style={{marginLeft: 8}} />}
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.qrButton} 
+            onPress={() => navigation.navigate('QRScanner')}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="qrcode-scan" size={20} color="#E53935" />
+            <Text style={styles.qrButtonText}>Escanear Código QR</Text>
+          </TouchableOpacity>
         </Animatable.View>
 
       </KeyboardAvoidingView>
@@ -99,6 +115,8 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#E53935', borderRadius: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 16, marginTop: 10 },
   buttonDisabled: { backgroundColor: '#8E2825' },
   buttonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  qrButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20, paddingVertical: 10 },
+  qrButtonText: { color: '#E53935', fontSize: 15, fontWeight: 'bold', marginLeft: 8 },
   errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#3B1919', padding: 12, borderRadius: 8, marginBottom: 20, borderWidth: 1, borderColor: '#FF5252' },
   errorText: { color: '#FF5252', fontSize: 13, marginLeft: 6, flex: 1 }
 });

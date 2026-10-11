@@ -75,7 +75,7 @@ export default function PatientScreen({ navigation }) {
         bpm: datosRef.current.bpm 
       });
 
-      if (currentUser && datosRef.current.bpm !== '--') {
+      if (currentUser) {
         let pushData = {
           bpm: datosRef.current.bpm,
           spo2: datosRef.current.spo2,
@@ -224,18 +224,23 @@ export default function PatientScreen({ navigation }) {
       
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerSubtitle}>MONITOR EN VIVO</Text>
-          <View style={styles.codeRow}>
-            <Text style={styles.headerTitle}>Paciente </Text>
-            <Text style={styles.codeHighlight}>{user ? user.uid.substring(0, 8) : '...'}</Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.headerSubtitle}>MONITOR EN VIVO</Text>
+            <View style={styles.codeRow}>
+              <Text style={styles.headerTitle}>Paciente </Text>
+              <Text style={styles.codeHighlight}>{user ? user.uid.substring(0, 8) : '...'}</Text>
+            </View>
           </View>
+          <Animatable.View 
+            animation={isScanning || isConnecting ? 'flash' : undefined} 
+            iterationCount="infinite" 
+            style={[styles.statusDot, { backgroundColor: getStatusColor() }]} 
+          />
         </View>
-        <Animatable.View 
-          animation={isScanning || isConnecting ? 'flash' : undefined} 
-          iterationCount="infinite" 
-          style={[styles.statusDot, { backgroundColor: getStatusColor() }]} 
-        />
+        <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('Profile')}>
+          <MaterialCommunityIcons name="cog" size={26} color="#8E8E93" />
+        </TouchableOpacity>
       </View>
 
       {/* Main Content */}
@@ -331,12 +336,6 @@ export default function PatientScreen({ navigation }) {
         </View>
 
       </View>
-      
-      {user && (
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>CERRAR SESIÓN</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -346,11 +345,13 @@ const styles = StyleSheet.create({
   
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20 },
+  headerContent: { flexDirection: 'row', flex: 1, justifyContent: 'space-between' },
   headerSubtitle: { color: '#8E8E93', fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 },
   codeRow: { flexDirection: 'row', alignItems: 'baseline' },
   headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: '300' },
   codeHighlight: { color: '#FF2D55', fontSize: 28, fontWeight: '700', letterSpacing: 1 },
   statusDot: { width: 14, height: 14, borderRadius: 7, marginTop: 8, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
+  profileBtn: { marginLeft: 20, marginTop: 4, padding: 8, backgroundColor: '#1A1A1A', borderRadius: 20 },
 
   // Content
   content: { flex: 1, paddingHorizontal: 20 },

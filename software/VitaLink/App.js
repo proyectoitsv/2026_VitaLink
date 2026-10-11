@@ -7,6 +7,8 @@ import RoleSelectionScreen from './screens/RoleSelectionScreen';
 import PatientScreen from './screens/PatientScreen';
 import FamilyLoginScreen from './screens/FamilyLoginScreen';
 import FamilyDashboardScreen from './screens/FamilyDashboardScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import QRScannerScreen from './screens/QRScannerScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -40,7 +42,17 @@ export default function App() {
         <Stack.Screen 
           name="FamilyDashboard" 
           component={FamilyDashboardScreen} 
-          options={{ title: 'Dashboard Familiar' }} 
+          options={{ title: 'Dashboard Familiar', headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
+          name="QRScanner" 
+          component={QRScannerScreen} 
+          options={{ headerShown: false }} 
         />
       </Stack.Navigator>
     </NavigationContainer>

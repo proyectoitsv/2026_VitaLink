@@ -8,12 +8,34 @@ export default function FamilyDashboardScreen({ route }) {
   const { patientId } = route.params;
   const [signos, setSignos] = useState(null);
   const [alerta, setAlerta] = useState(null);
+  const [patientName, setPatientName] = useState('');
 
   useEffect(() => {
     const db = getFirestore();
     
+    // Escuchar datos del paciente (nombre)
+    const unsubPaciente = onSnapshot(doc(db, 'pacientes', patientId), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().nombre) {
+        setPatientName(docSnap.data().nombre);
+      }
+    });
+
+    // Escuchar signos vitales live con fallback automático
     const unsubSignos = onSnapshot(doc(db, 'pacientes', patientId, 'signos_actuales', 'live'), (docSnap) => {
-      if (docSnap.exists()) setSignos(docSnap.data());
+      if (docSnap.exists()) {
+        setSignos(docSnap.data());
+      } else {
+        // Fallback: si live aún no existe, consultar el historial reciente
+        const qFallback = query(collection(db, 'pacientes', patientId, 'historial_signos'), orderBy('timestamp', 'desc'), limit(1));
+        const unsubFallback = onSnapshot(qFallback, (snapshot) => {
+          if (!snapshot.empty) {
+            setSignos(snapshot.docs[0].data());
+          } else {
+            // Si la base está vacía pero el paciente existe, mostrar tarjetas con guiones
+            setSignos({ bpm: '--', spo2: '--', bateria: '--', timestamp: null });
+          }
+        });
+      }
     });
 
     const qAlertas = query(collection(db, 'pacientes', patientId, 'alertas_criticas'), orderBy('timestamp', 'desc'), limit(1));
@@ -21,7 +43,7 @@ export default function FamilyDashboardScreen({ route }) {
       if (!snapshot.empty) setAlerta(snapshot.docs[0].data());
     });
 
-    return () => { unsubSignos(); unsubAlertas(); };
+    return () => { unsubPaciente(); unsubSignos(); unsubAlertas(); };
   }, [patientId]);
 
   const lat = alerta?.ubicacion?.latitude || signos?.ubicacion?.latitude;
@@ -64,12 +86,17 @@ export default function FamilyDashboardScreen({ route }) {
         
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerSubtitle}>MONITOR EN VIVO</Text>
             <View style={styles.codeRow}>
               <Text style={styles.headerTitle}>Paciente </Text>
-              <Text style={styles.codeHighlight}>{patientId}</Text>
+              <Text style={styles.codeHighlight} numberOfLines={1}>
+                {patientName ? patientName : patientId}
+              </Text>
             </View>
+            {patientName ? (
+              <Text style={styles.patientIdBadge}>ID: {patientId}</Text>
+            ) : null}
           </View>
           <View style={styles.statusDotWrapper}>
             <Animatable.View animation="pulse" iterationCount="infinite" style={[styles.statusDot, { backgroundColor: signos ? '#34C759' : '#FF9500' }]} />
@@ -196,6 +223,7 @@ const styles = StyleSheet.create({
   codeRow: { flexDirection: 'row', alignItems: 'baseline' },
   headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: '300' },
   codeHighlight: { color: '#FF2D55', fontSize: 28, fontWeight: '700', letterSpacing: 1 },
+  patientIdBadge: { color: '#8E8E93', fontSize: 13, fontWeight: '600', marginTop: 4, letterSpacing: 0.5 },
   statusDotWrapper: { marginTop: 8 },
   statusDot: { width: 14, height: 14, borderRadius: 7, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
 
