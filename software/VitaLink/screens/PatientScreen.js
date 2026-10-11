@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Button, PermissionsAndroid, Platform, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
 import { decode as decodeBase64 } from 'base-64';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
-import { getFirestore, collection, addDoc, serverTimestamp } from '@react-native-firebase/firestore';
+import { getFirestore, collection, addDoc, setDoc, doc, serverTimestamp } from '@react-native-firebase/firestore';
 import * as Location from 'expo-location';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Animatable from 'react-native-animatable';
 
 const bleManager = new BleManager();
 const VITALINK_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
@@ -14,101 +16,110 @@ const BAT_CHAR_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26aa';
 const CAIDA_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26ab';
 const SOS_CHAR_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26ac';
 
-export default function PatientScreen() {
+export default function PatientScreen({ navigation }) {
   const [isScanning, setIsScanning] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [device, setDevice] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
+  // Signos
   const [bpm, setBpm] = useState('--');
   const [spo2, setSpo2] = useState('--');
   const [bateria, setBateria] = useState('--');
   const [alertaCaida, setAlertaCaida] = useState('0');
   const [alertaSOS, setAlertaSOS] = useState('0');
 
-  const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  
-  const [ultimaSync, setUltimaSync] = useState('--:--:--');
   const [location, setLocation] = useState(null);
-
+  const db = getFirestore();
+  const userRef = useRef(null);
+  const locationRef = useRef(null);
   const datosRef = useRef({ bpm: '--', spo2: '--', bateria: '--', alertaCaida: '0', alertaSOS: '0' });
 
-  const db = getFirestore();
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
-    const subscriber = onAuthStateChanged(getAuth(), (currentUser) => {
-      setUser(currentUser);
-      if (initializing) setInitializing(false);
-      setIsLoggingIn(false);
+    locationRef.current = location;
+  }, [location]);
+
+  useEffect(() => {
+    const auth = getAuth();
+    signInAnonymously(auth);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        await setDoc(doc(db, 'pacientes', u.uid.substring(0, 8)), {
+          creado: serverTimestamp(),
+          activo: true
+        });
+      }
     });
-    return subscriber;
-  }, []);
-
-  // Solicitar permiso GPS
-  useEffect(() => {
+    
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      let loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc.coords);
-    })();
-  }, []);
-
-  useEffect(() => {
-    let interval;
-    if (connected && user) {
-      interval = setInterval(async () => {
-        let currentLoc = location;
-        try {
-          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          currentLoc = loc.coords;
+      if (status === 'granted') {
+        Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 5000 }, (loc) => {
           setLocation(loc.coords);
-        } catch(e){}
+        });
+      }
+    })();
 
-        const dataPayload = {
+    const interval = setInterval(() => {
+      const currentUser = userRef.current;
+      const currentLocation = locationRef.current;
+      
+      console.log('⏳ Intentando enviar signos...', { 
+        usuario: currentUser ? currentUser.uid.substring(0,8) : 'Nulo', 
+        bpm: datosRef.current.bpm 
+      });
+
+      if (currentUser && datosRef.current.bpm !== '--') {
+        let pushData = {
           bpm: datosRef.current.bpm,
           spo2: datosRef.current.spo2,
           bateria: datosRef.current.bateria,
-          alertaCaida: datosRef.current.alertaCaida,
-          alertaSOS: datosRef.current.alertaSOS,
-          timestamp: serverTimestamp(),
-          ubicacion: currentLoc ? { latitude: currentLoc.latitude, longitude: currentLoc.longitude } : null
+          timestamp: serverTimestamp()
         };
-        
-        const shortId = user.uid.substring(0, 8);
-        addDoc(collection(db, 'pacientes', shortId, 'historial_signos'), dataPayload)
-          .then(() => {
-            const now = new Date();
-            setUltimaSync(now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0') + ':' + now.getSeconds().toString().padStart(2, '0'));
-          })
-          .catch(()=>{});
-      }, 10000);
-    }
-    return () => clearInterval(interval);
-  }, [connected, user, location]);
+        if (currentLocation) {
+          pushData.ubicacion = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
+        }
+        console.log('✅ Enviando a Firestore...');
+        setDoc(doc(db, 'pacientes', currentUser.uid.substring(0, 8), 'signos_actuales', 'live'), pushData)
+          .then(() => console.log('✅ Firestore guardado OK'))
+          .catch((err) => console.error('❌ Error Firestore:', err));
+      }
+    }, 5000);
+
+    return () => { unsub(); clearInterval(interval); };
+  }, []);
 
   const requestPermissions = async () => {
     if (Platform.OS === 'android') {
-      const granted = await PermissionsAndroid.requestMultiple([
+      await PermissionsAndroid.requestMultiple([
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
       ]);
-      return granted['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED;
     }
-    return true;
   };
 
-  const loginAnonymously = () => {
-    setIsLoggingIn(true);
-    signInAnonymously(getAuth()).catch(error => { setIsLoggingIn(false); });
-  };
+  const scanAndConnect = async () => {
+    await requestPermissions();
+    setIsScanning(true);
 
-  const logout = () => {
-    disconnect();
-    signOut(getAuth());
+    bleManager.startDeviceScan(null, null, (error, scannedDevice) => {
+      if (error) { setIsScanning(false); return; }
+      
+      const esVitaLink = scannedDevice.name === 'VitaLink' || (scannedDevice.localName && scannedDevice.localName === 'VitaLink');
+      
+      if (esVitaLink) {
+        bleManager.stopDeviceScan();
+        setIsScanning(false);
+        connectToDevice(scannedDevice);
+      }
+    });
   };
 
   const connectToDevice = async (scannedDevice) => {
@@ -117,7 +128,6 @@ export default function PatientScreen() {
       const connectedDevice = await scannedDevice.connect();
       setDevice(connectedDevice);
       
-      // Delay for Android GATT
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       await connectedDevice.discoverAllServicesAndCharacteristics();
@@ -125,10 +135,8 @@ export default function PatientScreen() {
       setIsConnecting(false);
 
       bleManager.monitorCharacteristicForDevice(connectedDevice.id, VITALINK_SERVICE_UUID, BPM_CHAR_UUID, (error, characteristic) => {
-          if (error) console.log('Error BPM:', error);
           if (!error && characteristic?.value) {
             const val = decodeBase64(characteristic.value);
-            console.log('Got BPM:', val);
             setBpm(val);
             datosRef.current.bpm = val;
           }
@@ -167,130 +175,217 @@ export default function PatientScreen() {
             }
           }
       });
-
-      connectedDevice.onDisconnected(() => {
-        setConnected(false);
-        setDevice(null);
-        setBpm('--'); setSpo2('--'); setBateria('--');
-        setAlertaCaida('0'); setAlertaSOS('0');
-      });
-
-    } catch (error) { setIsConnecting(false); }
+    } catch (e) {
+      setIsConnecting(false);
+    }
   };
 
-  const startScan = async () => {
-    const permission = await requestPermissions();
-    if (!permission) return alert("Faltan permisos de Bluetooth");
-
-    setIsScanning(true);
-    setIsConnecting(false);
-    
-    bleManager.startDeviceScan(null, null, (error, scannedDevice) => {
-      if (error) { setIsScanning(false); return; }
-      const esVitaLink = (scannedDevice.name === 'VitaLink') || (scannedDevice.localName === 'VitaLink') || (scannedDevice.serviceUUIDs && scannedDevice.serviceUUIDs.includes(VITALINK_SERVICE_UUID.toLowerCase())) || (scannedDevice.id === '1E:CE:60:36:36:C8');
-      if (esVitaLink) {
-        bleManager.stopDeviceScan();
-        setIsScanning(false);
-        connectToDevice(scannedDevice);
-      }
-    });
-
-    setTimeout(() => {
-      bleManager.stopDeviceScan();
-      if (!isConnecting && !connected) setIsScanning(false);
-    }, 15000);
+  const getStatusColor = () => {
+    if (connected) return '#43A047';
+    if (isConnecting || isScanning) return '#FB8C00';
+    return '#E53935';
   };
 
-  const disconnect = async () => { if (device) await bleManager.cancelDeviceConnection(device.id); };
+  const getStatusText = () => {
+    if (connected) return 'Pulsera Conectada';
+    if (isConnecting) return 'Sincronizando...';
+    if (isScanning) return 'Buscando Pulsera...';
+    return 'Pulsera Desconectada';
+  };
 
-  if (initializing) return null;
+  const handleLogout = async () => {
+    await signOut(getAuth());
+    setUser(null);
+    if (device) {
+      await device.cancelConnection();
+      setDevice(null);
+      setConnected(false);
+    }
+    navigation.goBack();
+  };
 
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Proyecto VitaLink</Text>
-        <Text style={styles.subtitle}>Modo Paciente</Text>
-        <View style={{ marginTop: 50 }}>
-          <Button title={isLoggingIn ? "Ingresando..." : "Generar mi Código"} onPress={loginAnonymously} disabled={isLoggingIn} />
-        </View>
-      </View>
-    );
-  }
+  const heartbeatAnim = {
+    0: { transform: [{ scale: 1 }] },
+    0.15: { transform: [{ scale: 1.25 }] },
+    0.3: { transform: [{ scale: 1 }] },
+    0.45: { transform: [{ scale: 1.15 }] },
+    1: { transform: [{ scale: 1 }] }
+  };
+
+  const breatheAnim = {
+    0: { transform: [{ scale: 1 }], opacity: 0.7 },
+    0.5: { transform: [{ scale: 1.15 }], opacity: 1 },
+    1: { transform: [{ scale: 1 }], opacity: 0.7 }
+  };
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.titleSmall}>VitaLink</Text>
-        <Button title="Cerrar Sesin" color="#ff5252" onPress={logout} />
-      </View>
-      
-      <View style={{ width: '100%', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-        <Text style={styles.uid}>CDIGO: {user.uid.substring(0, 8)}</Text>
-        <Text style={[styles.uid, { color: '#005b9f', fontWeight: 'bold' }]}>Nube: {ultimaSync}</Text>
-      </View>
-      
-      <View style={styles.card}>
-        <Text style={styles.status}>
-          {connected ? "Conectada" : (isConnecting ? "Conectando..." : (isScanning ? "Buscando..." : "Desconectada"))}
-        </Text>
-        
-        {connected && (
-          <View style={styles.dashboard}>
-            <View style={styles.row}>
-              <View style={styles.dataBox}>
-                <Text style={styles.dataLabel}>Latidos</Text>
-                <Text style={styles.dataValue}>{bpm} <Text style={styles.unit}>BPM</Text></Text>
-              </View>
-              <View style={styles.dataBox}>
-                <Text style={styles.dataLabel}>Oxgeno</Text>
-                <Text style={styles.dataValue}>{spo2} <Text style={styles.unit}>%</Text></Text>
-              </View>
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.dataBox, {width: '100%', backgroundColor: '#e8f5e9'}]}>
-                <Text style={styles.dataLabel}>Batera de la Pulsera</Text>
-                <Text style={[styles.dataValue, {color: '#2e7d32'}]}>{bateria}%</Text>
-              </View>
-            </View>
-            <View style={styles.row}>
-              <View style={[styles.dataBox, alertaCaida === '1' ? styles.alertActive : styles.alertInactive]}>
-                <Text style={styles.dataLabel}>Cada</Text>
-                <Text style={styles.dataValue}>{alertaCaida === '1' ? 'S?!' : 'NO'}</Text>
-              </View>
-              <View style={[styles.dataBox, alertaSOS === '1' ? styles.alertActiveSOS : styles.alertInactive]}>
-                <Text style={styles.dataLabel}>Botn SOS</Text>
-                <Text style={styles.dataValue}>{alertaSOS === '1' ? 'S?!' : 'NO'}</Text>
-              </View>
-            </View>
+        <View>
+          <Text style={styles.headerSubtitle}>MONITOR EN VIVO</Text>
+          <View style={styles.codeRow}>
+            <Text style={styles.headerTitle}>Paciente </Text>
+            <Text style={styles.codeHighlight}>{user ? user.uid.substring(0, 8) : '...'}</Text>
           </View>
-        )}
+        </View>
+        <Animatable.View 
+          animation={isScanning || isConnecting ? 'flash' : undefined} 
+          iterationCount="infinite" 
+          style={[styles.statusDot, { backgroundColor: getStatusColor() }]} 
+        />
       </View>
 
-      {!connected ? (
-        <Button title={isConnecting ? "Conectando..." : (isScanning ? "Escaneando..." : "Conectar Pulsera")} onPress={startScan} disabled={isScanning || isConnecting} />
-      ) : (
-        <Button title="Desconectar" color="#757575" onPress={disconnect} />
+      {/* Main Content */}
+      <View style={styles.content}>
+        
+        {/* BPM Hero Card */}
+        <View style={styles.heroCard}>
+          <View style={styles.cardHeader}>
+            <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF2D55" />
+            <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
+          </View>
+          
+          <View style={styles.bpmContainer}>
+            <Animatable.View 
+              animation={heartbeatAnim} 
+              iterationCount="infinite" 
+              duration={bpm !== '--' && bpm !== '0' ? Math.max(500, 60000 / parseInt(bpm)) : 1000}
+              style={styles.heroIconWrapper}
+            >
+              <MaterialCommunityIcons name="cards-heart" size={100} color="#FF2D55" />
+            </Animatable.View>
+            
+            <View style={styles.bpmTextWrapper}>
+              <Text style={styles.bpmValue} adjustsFontSizeToFit numberOfLines={1}>{bpm}</Text>
+              <Text style={styles.bpmUnit}>LPM</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Secondary Metrics Row */}
+        <View style={styles.rowCards}>
+          
+          {/* SpO2 Card */}
+          <View style={[styles.smallCard, { flex: 1, marginRight: 8 }]}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="water" size={20} color="#32ADE6" />
+              <Text style={styles.cardTitle}>Oxígeno</Text>
+            </View>
+            <View style={styles.metricContainer}>
+              <Text style={styles.smallCardValue}>{spo2}</Text>
+              <Text style={styles.smallCardUnit}>%</Text>
+            </View>
+            <Animatable.View 
+              animation={breatheAnim} 
+              iterationCount="infinite" 
+              duration={3000}
+              style={styles.glowSpO2}
+            />
+          </View>
+
+          {/* Battery Card */}
+          <View style={[styles.smallCard, { flex: 1, marginLeft: 8 }]}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="battery-charging-60" size={20} color="#34C759" />
+              <Text style={styles.cardTitle}>Pulsera</Text>
+            </View>
+            <View style={styles.metricContainer}>
+              <Text style={styles.smallCardValue}>{bateria}</Text>
+              <Text style={styles.smallCardUnit}>%</Text>
+            </View>
+          </View>
+
+        </View>
+
+        {/* Actions / Alerts */}
+        <View style={styles.actionSection}>
+          {!connected && (
+            <TouchableOpacity 
+              style={styles.connectBtn} 
+              onPress={scanAndConnect}
+              disabled={isScanning || isConnecting}
+            >
+              {isScanning || isConnecting ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <MaterialCommunityIcons name="bluetooth-connect" size={24} color="#FFF" />
+              )}
+              <Text style={styles.connectBtnText}>
+                {isScanning ? 'BUSCANDO...' : isConnecting ? 'CONECTANDO...' : 'VINCULAR PULSERA'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {(alertaCaida === '1' || alertaSOS === '1') && (
+            <Animatable.View animation="shake" iterationCount="infinite" style={styles.alertCard}>
+              <MaterialCommunityIcons name="alert-octagon" size={32} color="#FFF" />
+              <View style={styles.alertTextGroup}>
+                <Text style={styles.alertTitle}>ALERTA CRÍTICA</Text>
+                <Text style={styles.alertDesc}>Se ha notificado al familiar.</Text>
+              </View>
+            </Animatable.View>
+          )}
+        </View>
+
+      </View>
+      
+      {user && (
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Text style={styles.logoutText}>CERRAR SESIÓN</Text>
+        </TouchableOpacity>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 10, marginTop: 40 },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#005b9f' },
-  titleSmall: { fontSize: 22, fontWeight: 'bold', color: '#005b9f' },
-  subtitle: { fontSize: 16, color: '#555', marginTop: 10 },
-  uid: { fontSize: 13, color: '#000', marginBottom: 20, alignSelf: 'flex-start', fontWeight: 'bold' },
-  card: { backgroundColor: 'white', padding: 20, borderRadius: 15, width: '100%', alignItems: 'center', marginBottom: 30, elevation: 4 },
-  status: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 20 },
-  dashboard: { width: '100%', gap: 10 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', gap: 10 },
-  dataBox: { flex: 1, alignItems: 'center', backgroundColor: '#e6f4fe', padding: 15, borderRadius: 10 },
-  dataLabel: { fontSize: 14, color: '#555', marginBottom: 5 },
-  dataValue: { fontSize: 32, fontWeight: 'bold', color: '#005b9f' },
-  unit: { fontSize: 16, color: '#005b9f' },
-  alertInactive: { backgroundColor: '#f5f5f5' },
-  alertActive: { backgroundColor: '#ffebee' }, 
-  alertActiveSOS: { backgroundColor: '#ffcdd2' } 
+  container: { flex: 1, backgroundColor: '#050505' },
+  
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20 },
+  headerSubtitle: { color: '#8E8E93', fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 },
+  codeRow: { flexDirection: 'row', alignItems: 'baseline' },
+  headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: '300' },
+  codeHighlight: { color: '#FF2D55', fontSize: 28, fontWeight: '700', letterSpacing: 1 },
+  statusDot: { width: 14, height: 14, borderRadius: 7, marginTop: 8, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
+
+  // Content
+  content: { flex: 1, paddingHorizontal: 20 },
+
+  // Cards Base
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  cardTitle: { color: '#8E8E93', fontSize: 15, fontWeight: '600', marginLeft: 8, letterSpacing: 0.5 },
+  
+  // Hero Card (BPM)
+  heroCard: { backgroundColor: '#121212', borderRadius: 32, padding: 24, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.5, shadowRadius: 20 },
+  bpmContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  heroIconWrapper: { shadowColor: '#FF2D55', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.4, shadowRadius: 30 },
+  bpmTextWrapper: { alignItems: 'flex-end', flex: 1 },
+  bpmValue: { color: '#FFFFFF', fontSize: 110, fontWeight: '200', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -4, textAlign: 'right' },
+  bpmUnit: { color: '#FF2D55', fontSize: 22, fontWeight: '800', letterSpacing: 1, marginTop: -5 },
+
+  // Row Cards
+  rowCards: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  smallCard: { backgroundColor: '#121212', borderRadius: 28, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
+  metricContainer: { flexDirection: 'row', alignItems: 'baseline', marginTop: 8 },
+  smallCardValue: { color: '#FFFFFF', fontSize: 50, fontWeight: '300', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -1 },
+  smallCardUnit: { color: '#8E8E93', fontSize: 18, fontWeight: '600', marginLeft: 4 },
+  glowSpO2: { position: 'absolute', bottom: -20, right: -20, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(50, 173, 230, 0.15)', blurRadius: 20 },
+
+  // Actions
+  actionSection: { marginTop: 10 },
+  connectBtn: { backgroundColor: '#2C2C2E', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 18, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  connectBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginLeft: 10, letterSpacing: 1 },
+  
+  alertCard: { backgroundColor: '#FF2D55', flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 24, shadowColor: '#FF2D55', shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.4, shadowRadius: 15 },
+  alertTextGroup: { marginLeft: 16 },
+  alertTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  alertDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '500', marginTop: 2 },
+  
+  // Footer
+  logoutBtn: { paddingVertical: 20, alignItems: 'center' },
+  logoutText: { color: '#48484A', fontSize: 13, fontWeight: '700', letterSpacing: 1 }
 });

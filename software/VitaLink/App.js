@@ -13,11 +13,19 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="RoleSelection">
+      <Stack.Navigator 
+        initialRouteName="RoleSelection"
+        screenOptions={{
+          headerStyle: { backgroundColor: '#000000' },
+          headerTintColor: '#FFFFFF',
+          headerTitleStyle: { fontWeight: 'bold' },
+          headerShadowVisible: false,
+        }}
+      >
         <Stack.Screen 
           name="RoleSelection" 
           component={RoleSelectionScreen} 
-          options={{ title: 'VitaLink - Inicio' }} 
+          options={{ title: 'VitaLink - Inicio', headerShown: false }} 
         />
         <Stack.Screen 
           name="Patient" 
