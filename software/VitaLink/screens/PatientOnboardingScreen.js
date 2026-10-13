@@ -11,7 +11,9 @@ import {
   Alert, 
   ScrollView,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard
 } from 'react-native';
 import { getAuth, signInAnonymously } from '@react-native-firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot, serverTimestamp } from '@react-native-firebase/firestore';
@@ -177,7 +179,7 @@ export default function PatientOnboardingScreen({ navigation }) {
   };
 
   const activeAvatarObj = AVATARS.find(a => a.id === selectedAvatar) || AVATARS[0];
-  const qrUrl = uid ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${uid}&color=255-255-255&bgcolor=18-18-18` : null;
+  const qrUrl = uid ? `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${uid}&color=255-255-255&bgcolor=18-18-18` : null;
 
   return (
     <View style={styles.container}>
@@ -218,12 +220,16 @@ export default function PatientOnboardingScreen({ navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
         style={styles.contentContainer}
       >
-        {/* STEP 1: Nombre y Apellido */}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ flex: 1 }}>
+            {/* STEP 1: Nombre y Apellido */}
         {step === 1 && (
           <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
             <View style={styles.stepHeader}>
               <View style={styles.iconCircle}>
-                <MaterialCommunityIcons name="account" size={32} color="#FF2D55" />
+                <Animatable.View animation="pulse" iterationCount="infinite" duration={2200}>
+                  <MaterialCommunityIcons name="account" size={32} color="#FF2D55" />
+                </Animatable.View>
               </View>
               <Text style={styles.title}>¿Cómo te llamás?</Text>
               <Text style={styles.subtitle}>
@@ -235,17 +241,16 @@ export default function PatientOnboardingScreen({ navigation }) {
               <Text style={styles.label}>NOMBRE</Text>
               <TextInput 
                 style={styles.input} 
-                placeholder="Ej: Franco"
+                placeholder="Ej: Carlos"
                 placeholderTextColor="#555"
                 value={nombre}
                 onChangeText={setNombre}
-                autoFocus
               />
 
               <Text style={styles.label}>APELLIDO</Text>
               <TextInput 
                 style={styles.input} 
-                placeholder="Ej: Castillo"
+                placeholder="Ej: Gómez"
                 placeholderTextColor="#555"
                 value={apellido}
                 onChangeText={setApellido}
@@ -377,7 +382,9 @@ export default function PatientOnboardingScreen({ navigation }) {
           <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
             <View style={styles.stepHeader}>
               <View style={styles.iconCircle}>
-                <MaterialCommunityIcons name="clipboard-pulse-outline" size={32} color="#34C759" />
+                <Animatable.View animation="pulse" iterationCount="infinite" duration={2200}>
+                  <MaterialCommunityIcons name="clipboard-pulse-outline" size={32} color="#34C759" />
+                </Animatable.View>
               </View>
               <Text style={styles.title}>Ficha de Salud</Text>
               <Text style={styles.subtitle}>
@@ -434,7 +441,7 @@ export default function PatientOnboardingScreen({ navigation }) {
 
         {/* STEP 4: Vincular con un Familiar (Paso Final) */}
         {step === 4 && (
-          <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
+          <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCardLink}>
             <View style={styles.stepHeader}>
               <Text style={styles.title}>Vinculá a tu Familiar</Text>
               <Text style={styles.subtitle}>
@@ -444,6 +451,7 @@ export default function PatientOnboardingScreen({ navigation }) {
 
             {/* Code Box & QR */}
             <View style={styles.linkCard}>
+              <Text style={styles.codeLabel}>CÓDIGO DE VINCULACIÓN</Text>
               <View style={styles.codeBadge}>
                 <Text style={styles.codeText}>{uid || '...'}</Text>
               </View>
@@ -494,6 +502,8 @@ export default function PatientOnboardingScreen({ navigation }) {
             </View>
           </Animatable.View>
         )}
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </View>
   );
@@ -513,24 +523,25 @@ const styles = StyleSheet.create({
   stepCounterText: { color: '#8E8E93', fontSize: 13, fontWeight: '700' },
 
   // Content Container (Fixed layout, NO scroll overflow)
-  contentContainer: { flex: 1, paddingHorizontal: 22, justifyContent: 'center' },
-  stepCard: { flex: 1, justifyContent: 'space-between', paddingVertical: 10 },
+  contentContainer: { flex: 1, paddingHorizontal: 22, justifyContent: 'flex-start', paddingTop: 8 },
+  stepCard: { flex: 1, justifyContent: 'flex-start', paddingVertical: 4 },
+  stepCardLink: { flex: 1, justifyContent: 'space-between', paddingVertical: 4 },
 
   // Step Header
-  stepHeader: { alignItems: 'center', marginBottom: 12 },
-  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,45,85,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,45,85,0.2)' },
-  title: { color: '#FFF', fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3, marginBottom: 8 },
-  subtitle: { color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 19, paddingHorizontal: 12 },
+  stepHeader: { alignItems: 'center', marginTop: 4, marginBottom: 14 },
+  iconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,45,85,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,45,85,0.2)' },
+  title: { color: '#FFF', fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3, marginBottom: 6 },
+  subtitle: { color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 18, paddingHorizontal: 12 },
 
   // Form Elements
-  formGroup: { marginVertical: 8 },
+  formGroup: { marginTop: 4, marginBottom: 12 },
   label: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
-  input: { backgroundColor: '#141414', color: '#FFF', fontSize: 16, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: '#222' },
+  input: { backgroundColor: '#141414', color: '#FFF', fontSize: 16, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: '#222' },
   row: { flexDirection: 'row' },
 
   // Avatar Step
-  avatarPreviewSection: { alignItems: 'center', marginVertical: 6 },
-  avatarCirclePreview: { width: 84, height: 84, borderRadius: 42, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
+  avatarPreviewSection: { alignItems: 'center', marginTop: 4, marginBottom: 8 },
+  avatarCirclePreview: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
   avatarCircleWithPhoto: { borderColor: '#34C759' },
   avatarImg: { width: '100%', height: '100%' },
   avatarStatusText: { color: '#8E8E93', fontSize: 12, fontWeight: '600', marginTop: 6 },
@@ -550,25 +561,26 @@ const styles = StyleSheet.create({
   avatarItemText: { color: '#777', fontSize: 9, fontWeight: '600', marginTop: 3 },
   avatarDot: { position: 'absolute', top: 4, right: 4, width: 5, height: 5, borderRadius: 2.5 },
 
-  // Step 4: Link Card
-  linkCard: { alignItems: 'center', backgroundColor: '#121212', borderRadius: 22, padding: 16, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  codeBadge: { backgroundColor: '#1E1E1E', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  codeText: { color: '#FF2D55', fontSize: 24, fontWeight: '900', letterSpacing: 3 },
-  qrBox: { padding: 10, backgroundColor: '#181818', borderRadius: 16, marginBottom: 12 },
-  qrImage: { width: 140, height: 140 },
+  // Step 4: Link Card (Much larger QR and Code)
+  linkCard: { alignItems: 'center', backgroundColor: '#121212', borderRadius: 22, paddingVertical: 16, paddingHorizontal: 16, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  codeLabel: { color: '#8E8E93', fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
+  codeBadge: { backgroundColor: '#1E1E1E', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  codeText: { color: '#FF2D55', fontSize: 32, fontWeight: '900', letterSpacing: 4 },
+  qrBox: { padding: 12, backgroundColor: '#181818', borderRadius: 18, marginBottom: 12 },
+  qrImage: { width: 210, height: 210 },
 
-  waitingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,149,0,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,149,0,0.25)' },
+  waitingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,149,0,0.1)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,149,0,0.25)' },
   waitingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF9500', marginRight: 8 },
   waitingText: { color: '#FF9500', fontSize: 11, fontWeight: '700' },
-  linkedSuccessBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(52,199,89,0.15)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' },
-  linkedSuccessText: { color: '#34C759', fontSize: 12, fontWeight: '800' },
+  linkedSuccessBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(52,199,89,0.15)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' },
+  linkedSuccessText: { color: '#34C759', fontSize: 13, fontWeight: '800' },
 
   // Bottom Buttons
-  bottomActions: { marginTop: 16, marginBottom: 10 },
+  bottomActions: { marginTop: 18, marginBottom: 10 },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 16, borderRadius: 16, shadowColor: '#FFF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
   primaryBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
 
-  bottomActionsFinal: { alignItems: 'center', marginTop: 10, marginBottom: 8 },
+  bottomActionsFinal: { alignItems: 'center', marginTop: 8, marginBottom: 8 },
   skipBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
   skipBtnText: { color: '#8E8E93', fontSize: 13, fontWeight: '700' }
 });

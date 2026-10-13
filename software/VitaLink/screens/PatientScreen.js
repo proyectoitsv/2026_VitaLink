@@ -79,12 +79,16 @@ export default function PatientScreen({ navigation }) {
       }
     });
     
+    let locationSub = null;
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
-        Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 5000 }, (loc) => {
-          setLocation(loc.coords);
-        });
+        locationSub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+          (loc) => {
+            setLocation(loc.coords);
+          }
+        );
       }
     })();
 
@@ -114,7 +118,12 @@ export default function PatientScreen({ navigation }) {
       }
     }, 5000);
 
-    return () => { unsubAuth(); unsubProfile(); clearInterval(interval); };
+    return () => { 
+      unsubAuth(); 
+      unsubProfile(); 
+      clearInterval(interval); 
+      if (locationSub) locationSub.remove();
+    };
   }, []);
 
   const requestPermissions = async () => {
@@ -300,7 +309,9 @@ export default function PatientScreen({ navigation }) {
         {/* BPM Hero Card */}
         <View style={styles.heroCard}>
           <View style={styles.cardHeader}>
-            <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF2D55" />
+            <Animatable.View animation="pulse" iterationCount="infinite" duration={1500}>
+              <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF2D55" />
+            </Animatable.View>
             <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
           </View>
           
@@ -327,7 +338,9 @@ export default function PatientScreen({ navigation }) {
           {/* SpO2 Card */}
           <View style={[styles.smallCard, { flex: 1, marginRight: 8 }]}>
             <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="water" size={20} color="#32ADE6" />
+              <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500}>
+                <MaterialCommunityIcons name="water" size={20} color="#32ADE6" />
+              </Animatable.View>
               <Text style={styles.cardTitle}>Oxígeno</Text>
             </View>
             <View style={styles.metricContainer}>
@@ -337,7 +350,7 @@ export default function PatientScreen({ navigation }) {
             <Animatable.View 
               animation={breatheAnim} 
               iterationCount="infinite" 
-              duration={3000}
+              duration={2500}
               style={styles.glowSpO2}
             />
           </View>
@@ -345,7 +358,9 @@ export default function PatientScreen({ navigation }) {
           {/* Battery Card */}
           <View style={[styles.smallCard, { flex: 1, marginLeft: 8 }]}>
             <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="battery-charging-60" size={20} color="#34C759" />
+              <Animatable.View animation="pulse" iterationCount="infinite" duration={3000}>
+                <MaterialCommunityIcons name="battery-charging-60" size={20} color="#34C759" />
+              </Animatable.View>
               <Text style={styles.cardTitle}>Pulsera</Text>
             </View>
             <View style={styles.metricContainer}>

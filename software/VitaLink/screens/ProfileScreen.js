@@ -150,7 +150,7 @@ export default function ProfileScreen({ navigation }) {
 
   if (!user) return <View style={styles.container}><ActivityIndicator color="#FF2D55" /></View>;
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${uid}&color=255-255-255&bgcolor=18-18-18`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${uid}&color=255-255-255&bgcolor=18-18-18`;
 
   const activeAvatarObj = AVATARS.find(a => a.id === selectedAvatar) || AVATARS[0];
 
@@ -282,7 +282,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.inputLabel}>Nombre</Text>
               <TextInput 
                 style={styles.input} 
-                placeholder="Ej: Franco"
+                placeholder="Ej: Carlos"
                 placeholderTextColor="#555"
                 value={nombre}
                 onChangeText={setNombre}
@@ -293,7 +293,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.inputLabel}>Apellido</Text>
               <TextInput 
                 style={styles.input} 
-                placeholder="Ej: Castillo"
+                placeholder="Ej: Gómez"
                 placeholderTextColor="#555"
                 value={apellido}
                 onChangeText={setApellido}
@@ -450,9 +450,9 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#181818', color: '#FFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#262626' },
 
   // Code & QR
-  codeText: { color: '#FF2D55', fontSize: 28, fontWeight: '900', letterSpacing: 2, marginBottom: 6 },
-  qrWrapper: { alignSelf: 'center', padding: 14, backgroundColor: '#181818', borderRadius: 16, marginTop: 10 },
-  qrImage: { width: 170, height: 170 },
+  codeText: { color: '#FF2D55', fontSize: 32, fontWeight: '900', letterSpacing: 3, marginBottom: 8 },
+  qrWrapper: { alignSelf: 'center', padding: 14, backgroundColor: '#181818', borderRadius: 18, marginTop: 10 },
+  qrImage: { width: 210, height: 210 },
 
   // Buttons
   bigSaveBtn: { backgroundColor: '#FFF', paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 10, marginBottom: 15 },

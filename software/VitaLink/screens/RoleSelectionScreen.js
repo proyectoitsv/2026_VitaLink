@@ -53,36 +53,40 @@ export default function RoleSelectionScreen({ navigation }) {
       </View>
 
       <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={styles.cardButton} 
-          activeOpacity={0.7}
-          onPress={handlePatientPress}
-          disabled={checkingPatient}
-        >
-          <View style={[styles.iconCircle, {backgroundColor: '#2A1A1A'}]}>
-            <MaterialCommunityIcons name="watch-variant" size={32} color="#E53935" />
-          </View>
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Soy Paciente</Text>
-            <Text style={styles.cardDesc}>Tengo la pulsera y quiero emitir mis signos vitales.</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#555" />
-        </TouchableOpacity>
+        <Animatable.View animation="fadeInUp" duration={450} delay={100}>
+          <TouchableOpacity 
+            style={styles.cardButton} 
+            activeOpacity={0.7}
+            onPress={handlePatientPress}
+            disabled={checkingPatient}
+          >
+            <View style={[styles.iconCircle, {backgroundColor: '#2A1A1A'}]}>
+              <MaterialCommunityIcons name="watch-variant" size={32} color="#E53935" />
+            </View>
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>Soy Paciente</Text>
+              <Text style={styles.cardDesc}>Tengo la pulsera y quiero emitir mis signos vitales.</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#555" />
+          </TouchableOpacity>
+        </Animatable.View>
 
-        <TouchableOpacity 
-          style={styles.cardButton} 
-          activeOpacity={0.7}
-          onPress={() => navigation.navigate('FamilyPatients')}
-        >
-          <View style={[styles.iconCircle, {backgroundColor: '#1A2A2A'}]}>
-            <MaterialCommunityIcons name="account-supervisor" size={32} color="#43A047" />
-          </View>
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Soy Familiar</Text>
-            <Text style={styles.cardDesc}>Quiero monitorear a mi ser querido a distancia.</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color="#555" />
-        </TouchableOpacity>
+        <Animatable.View animation="fadeInUp" duration={450} delay={250}>
+          <TouchableOpacity 
+            style={styles.cardButton} 
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('FamilyPatients')}
+          >
+            <View style={[styles.iconCircle, {backgroundColor: '#1A2A2A'}]}>
+              <MaterialCommunityIcons name="account-supervisor" size={32} color="#43A047" />
+            </View>
+            <View style={styles.cardText}>
+              <Text style={styles.cardTitle}>Soy Familiar</Text>
+              <Text style={styles.cardDesc}>Quiero monitorear a mi ser querido a distancia.</Text>
+            </View>
+            <MaterialCommunityIcons name="chevron-right" size={24} color="#555" />
+          </TouchableOpacity>
+        </Animatable.View>
       </View>
     </View>
   );

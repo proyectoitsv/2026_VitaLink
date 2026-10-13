@@ -93,7 +93,9 @@ export default function FamilyLoginScreen({ navigation, route }) {
 
           <Animatable.View animation="fadeInDown" style={styles.header}>
             <View style={styles.iconCircle}>
-              <MaterialCommunityIcons name="account-plus" size={36} color="#FF2D55" />
+              <Animatable.View animation="pulse" iterationCount="infinite" duration={2200}>
+                <MaterialCommunityIcons name="account-plus" size={36} color="#FF2D55" />
+              </Animatable.View>
             </View>
             <Text style={styles.title}>Vincular Paciente</Text>
             <Text style={styles.subtitle}>

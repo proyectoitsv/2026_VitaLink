@@ -233,8 +233,10 @@ function PatientListItem({ item, db, onPress, onRemove }) {
             </Animatable.View>
           ) : vitals && vitals.bpm && vitals.bpm !== '--' ? (
             <View style={styles.vitalsPill}>
-              <MaterialCommunityIcons name="heart-pulse" size={16} color="#FF2D55" style={{ marginRight: 4 }} />
-              <Text style={styles.vitalsPillText}>{vitals.bpm} BPM</Text>
+              <Animatable.View animation="pulse" iterationCount="infinite" duration={1200}>
+                <MaterialCommunityIcons name="heart-pulse" size={16} color="#FF2D55" style={{ marginRight: 4 }} />
+              </Animatable.View>
+              <Text style={styles.vitalsPillText}>{vitals.bpm} LPM</Text>
             </View>
           ) : (
             <View style={styles.waitingPill}>

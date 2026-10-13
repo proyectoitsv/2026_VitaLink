@@ -41,6 +41,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
       }
     });
 
+    let unsubFallback = () => {};
     // Escuchar signos vitales live con fallback automático
     const unsubSignos = onSnapshot(doc(db, 'pacientes', patientId, 'signos_actuales', 'live'), (docSnap) => {
       if (docSnap.exists()) {
@@ -48,7 +49,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
       } else {
         // Fallback: si live aún no existe, consultar el historial reciente
         const qFallback = query(collection(db, 'pacientes', patientId, 'historial_signos'), orderBy('timestamp', 'desc'), limit(1));
-        const unsubFallback = onSnapshot(qFallback, (snapshot) => {
+        unsubFallback = onSnapshot(qFallback, (snapshot) => {
           if (!snapshot.empty) {
             setSignos(snapshot.docs[0].data());
           } else {
@@ -64,7 +65,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
       if (!snapshot.empty) setAlerta(snapshot.docs[0].data());
     });
 
-    return () => { unsubPaciente(); unsubSignos(); unsubAlertas(); };
+    return () => { unsubPaciente(); unsubSignos(); unsubAlertas(); unsubFallback(); };
   }, [patientId]);
 
   // Extraer únicamente el primer nombre para evitar desbordes en pantalla
@@ -230,15 +231,17 @@ export default function FamilyDashboardScreen({ navigation, route }) {
             {/* BPM Hero Card */}
             <View style={styles.heroCard}>
               <View style={styles.cardHeader}>
-                <MaterialCommunityIcons name="heart-pulse" size={22} color="#FF2D55" />
+                <Animatable.View animation="pulse" iterationCount="infinite" duration={1500}>
+                  <MaterialCommunityIcons name="heart-pulse" size={22} color="#FF2D55" />
+                </Animatable.View>
                 <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
               </View>
               
               <View style={styles.bpmContainer}>
                 <Animatable.View 
-                  animation={signos.bpm !== '--' && signos.bpm !== '0' ? heartbeatAnim : undefined} 
+                  animation={heartbeatAnim} 
                   iterationCount="infinite" 
-                  duration={signos.bpm ? Math.max(500, 60000 / parseInt(signos.bpm)) : 1000}
+                  duration={signos.bpm && signos.bpm !== '--' && signos.bpm !== '0' ? Math.max(500, 60000 / parseInt(signos.bpm)) : 1000}
                   style={styles.heroIconWrapper}
                 >
                   <MaterialCommunityIcons name="cards-heart" size={90} color="#FF2D55" />
@@ -256,7 +259,9 @@ export default function FamilyDashboardScreen({ navigation, route }) {
               {/* SpO2 Card */}
               <View style={[styles.smallCard, { flex: 1, marginRight: 8 }]}>
                 <View style={styles.cardHeader}>
-                  <MaterialCommunityIcons name="water" size={18} color="#32ADE6" />
+                  <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500}>
+                    <MaterialCommunityIcons name="water" size={19} color="#32ADE6" />
+                  </Animatable.View>
                   <Text style={styles.cardTitle}>Oxígeno</Text>
                 </View>
                 <View style={styles.metricContainer}>
@@ -266,7 +271,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
                 <Animatable.View 
                   animation={breatheAnim} 
                   iterationCount="infinite" 
-                  duration={3000}
+                  duration={2500}
                   style={styles.glowSpO2}
                 />
               </View>
@@ -274,7 +279,9 @@ export default function FamilyDashboardScreen({ navigation, route }) {
               {/* Battery Card */}
               <View style={[styles.smallCard, { flex: 1, marginLeft: 8 }]}>
                 <View style={styles.cardHeader}>
-                  <MaterialCommunityIcons name="battery-charging-60" size={18} color="#34C759" />
+                  <Animatable.View animation="pulse" iterationCount="infinite" duration={3000}>
+                    <MaterialCommunityIcons name="battery-charging-60" size={19} color="#34C759" />
+                  </Animatable.View>
                   <Text style={styles.cardTitle}>Pulsera</Text>
                 </View>
                 <View style={styles.metricContainer}>
