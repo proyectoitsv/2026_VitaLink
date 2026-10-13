@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Native & Build outputs
+.expo/
+**/.expo/
+android/
+**/android/
+ios/
+**/ios/
+dist/
+web-build/
+
+# Local docs
+CONTEXTO_PROYECTO.md
