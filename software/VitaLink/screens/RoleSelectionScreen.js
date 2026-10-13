@@ -2,8 +2,44 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { getAuth } from '@react-native-firebase/auth';
+import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore';
 
 export default function RoleSelectionScreen({ navigation }) {
+  const [checkingPatient, setCheckingPatient] = React.useState(false);
+
+  const handlePatientPress = async () => {
+    if (checkingPatient) return;
+    setCheckingPatient(true);
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        // No hay sesión anónima previa: es nuevo paciente
+        setCheckingPatient(false);
+        navigation.navigate('PatientOnboarding');
+        return;
+      }
+      const db = getFirestore();
+      const uid = user.uid.substring(0, 8);
+      const snap = await getDoc(doc(db, 'pacientes', uid));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data && (data.perfilCompletado || data.nombre)) {
+          setCheckingPatient(false);
+          navigation.navigate('Patient');
+          return;
+        }
+      }
+      setCheckingPatient(false);
+      navigation.navigate('PatientOnboarding');
+    } catch (e) {
+      console.warn('Error al verificar paciente:', e);
+      setCheckingPatient(false);
+      navigation.navigate('Patient');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
@@ -20,7 +56,8 @@ export default function RoleSelectionScreen({ navigation }) {
         <TouchableOpacity 
           style={styles.cardButton} 
           activeOpacity={0.7}
-          onPress={() => navigation.navigate('Patient')}
+          onPress={handlePatientPress}
+          disabled={checkingPatient}
         >
           <View style={[styles.iconCircle, {backgroundColor: '#2A1A1A'}]}>
             <MaterialCommunityIcons name="watch-variant" size={32} color="#E53935" />

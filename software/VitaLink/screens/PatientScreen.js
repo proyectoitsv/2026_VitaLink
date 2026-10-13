@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar, Image } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
 import { decode as decodeBase64 } from 'base-64';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
@@ -30,7 +30,7 @@ export default function PatientScreen({ navigation }) {
   const [alertaSOS, setAlertaSOS] = useState('0');
 
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({ nombre: '', apellido: '', avatar: 'account-circle' });
+  const [profile, setProfile] = useState({ nombre: '', apellido: '', avatar: 'account-circle', foto: null });
   const [location, setLocation] = useState(null);
   const db = getFirestore();
   const userRef = useRef(null);
@@ -62,11 +62,18 @@ export default function PatientScreen({ navigation }) {
         unsubProfile = onSnapshot(doc(db, 'pacientes', uid), (snap) => {
           if (snap.exists()) {
             const data = snap.data();
+            if (!data.perfilCompletado && !data.nombre) {
+              navigation.replace('PatientOnboarding');
+              return;
+            }
             setProfile({
               nombre: data.nombre || '',
               apellido: data.apellido || '',
-              avatar: data.avatar || 'account-circle'
+              avatar: data.avatar || 'account-circle',
+              foto: data.foto || null
             });
+          } else {
+            navigation.replace('PatientOnboarding');
           }
         });
       }
@@ -248,9 +255,25 @@ export default function PatientScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View style={styles.avatarCircle}>
-            <MaterialCommunityIcons name={profile.avatar || 'account-circle'} size={36} color="#FF2D55" />
-          </View>
+          <TouchableOpacity 
+            style={styles.backCircleBtn} 
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.avatarCircle} 
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.8}
+          >
+            {profile.foto ? (
+              <Image source={{ uri: profile.foto }} style={styles.avatarImg} />
+            ) : (
+              <MaterialCommunityIcons name={profile.avatar || 'account-circle'} size={34} color="#FF2D55" />
+            )}
+          </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <View style={styles.greetingRow}>
               <MaterialCommunityIcons name={greeting.icon} size={14} color="#FF9500" style={{ marginRight: 5 }} />
@@ -372,14 +395,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050505' },
   
   // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 },
   headerContent: { flexDirection: 'row', flex: 1, alignItems: 'center' },
-  avatarCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#161616', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  backCircleBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginRight: 10 },
+  avatarCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#161616', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  avatarImg: { width: '100%', height: '100%' },
   greetingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   headerSubtitle: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
   headerTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', letterSpacing: 0.3 },
-  statusDot: { width: 12, height: 12, borderRadius: 6, marginLeft: 10, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
-  profileBtn: { marginLeft: 16, padding: 8, backgroundColor: '#1A1A1A', borderRadius: 20 },
+  statusDot: { width: 10, height: 10, borderRadius: 5, marginLeft: 8, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
+  profileBtn: { marginLeft: 10, width: 42, height: 42, borderRadius: 21, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
 
   // Content
   content: { flex: 1, paddingHorizontal: 20 },

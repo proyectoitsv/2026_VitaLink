@@ -7,6 +7,7 @@ import {
   ScrollView, 
   StatusBar, 
   ActivityIndicator, 
+  Image, 
   Alert 
 } from 'react-native';
 import { getAuth, signInAnonymously } from '@react-native-firebase/auth';
@@ -197,7 +198,11 @@ function PatientListItem({ item, db, onPress, onRemove }) {
       >
         {/* Left: Avatar */}
         <View style={[styles.avatarCircle, alerta && { borderColor: '#FFF' }]}>
-          <MaterialCommunityIcons name={avatar} size={36} color={alerta ? "#FFF" : "#FF2D55"} />
+          {patientData?.foto ? (
+            <Image source={{ uri: patientData.foto }} style={styles.avatarImg} />
+          ) : (
+            <MaterialCommunityIcons name={avatar} size={36} color={alerta ? "#FFF" : "#FF2D55"} />
+          )}
         </View>
 
         {/* Center: Info */}
@@ -278,7 +283,8 @@ const styles = StyleSheet.create({
   listContent: { padding: 20, paddingBottom: 50 },
   patientCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', borderRadius: 24, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   patientCardAlert: { backgroundColor: '#380B13', borderColor: '#FF2D55' },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' },
+  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  avatarImg: { width: '100%', height: '100%' },
   cardInfo: { flex: 1, marginLeft: 16, marginRight: 8 },
   nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   patientName: { color: '#FFF', fontSize: 18, fontWeight: '700' },

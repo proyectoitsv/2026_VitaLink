@@ -56,7 +56,16 @@ export default function FamilyLoginScreen({ navigation, route }) {
             vinculo: selectedVinculo,
             nombre: fullName || patientData.nombre || '',
             avatar: patientData.avatar || 'account-circle',
+            foto: patientData.foto || null,
             agregadoEn: serverTimestamp()
+          }, { merge: true });
+
+          // Notificar al paciente que un familiar se vinculó en tiempo real
+          await setDoc(doc(db, 'pacientes', cleanId), {
+            familiarVinculado: true,
+            ultimoFamiliarUid: familyUid,
+            vinculoFamiliar: selectedVinculo,
+            vinculadoEn: serverTimestamp()
           }, { merge: true });
         }
         navigation.navigate('FamilyDashboard', { patientId: cleanId });

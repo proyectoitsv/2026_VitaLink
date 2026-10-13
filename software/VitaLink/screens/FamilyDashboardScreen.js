@@ -170,7 +170,11 @@ export default function FamilyDashboardScreen({ navigation, route }) {
         {/* Patient Profile Header Card */}
         <Animatable.View animation="fadeInDown" duration={400} style={styles.patientHeaderCard}>
           <View style={styles.avatarCircle}>
-            <MaterialCommunityIcons name={avatar} size={36} color="#FF2D55" />
+            {patientData?.foto ? (
+              <Image source={{ uri: patientData.foto }} style={styles.avatarImg} />
+            ) : (
+              <MaterialCommunityIcons name={avatar} size={36} color="#FF2D55" />
+            )}
           </View>
           <View style={styles.profileTextGroup}>
             <Text style={styles.headerSubtitle}>MONITOR DEL PACIENTE</Text>
@@ -336,7 +340,8 @@ const styles = StyleSheet.create({
 
   // Patient Header Card
   patientHeaderCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 14 },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,45,85,0.3)', marginRight: 14 },
+  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,45,85,0.3)', marginRight: 14, overflow: 'hidden' },
+  avatarImg: { width: '100%', height: '100%' },
   profileTextGroup: { flex: 1 },
   headerSubtitle: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 2 },
   headerName: { color: '#FFFFFF', fontSize: 30, fontWeight: '700', letterSpacing: 0.3 },

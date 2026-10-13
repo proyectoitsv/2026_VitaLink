@@ -10,26 +10,22 @@ import {
   Platform, 
   ScrollView, 
   ActivityIndicator, 
-  StatusBar 
+  StatusBar,
+  Alert 
 } from 'react-native';
 import { getAuth, signOut } from '@react-native-firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from '@react-native-firebase/firestore';
+import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
-
-const AVATARS = [
-  { id: 'account-circle', label: 'Estándar', color: '#0A84FF' },
-  { id: 'face-man-profile', label: 'Hombre', color: '#30D158' },
-  { id: 'face-woman-profile', label: 'Mujer', color: '#FF375F' },
-  { id: 'emoticon-happy-outline', label: 'Alegre', color: '#FFD60A' },
-  { id: 'shield-heart', label: 'Protección', color: '#FF2D55' },
-  { id: 'medical-bag', label: 'Clínico', color: '#64D2FF' },
-];
+import { AVATARS } from '../constants/avatars';
 
 export default function ProfileScreen({ navigation }) {
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('account-circle');
+  const [foto, setFoto] = useState(null);
+  const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
   
   // Ficha Médica
   const [edad, setEdad] = useState('');
@@ -54,6 +50,7 @@ export default function ProfileScreen({ navigation }) {
           if (data.nombre) setNombre(data.nombre);
           if (data.apellido) setApellido(data.apellido);
           if (data.avatar) setSelectedAvatar(data.avatar);
+          if (data.foto) setFoto(data.foto);
           if (data.edad) setEdad(data.edad);
           if (data.tipoSangre) setTipoSangre(data.tipoSangre);
           if (data.condiciones) setCondiciones(data.condiciones);
@@ -65,6 +62,60 @@ export default function ProfileScreen({ navigation }) {
     }
   }, [user, uid]);
 
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso necesario', 'Se necesita acceso a la cámara para tomar una foto de perfil.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.3,
+        base64: true,
+      });
+      if (!result.canceled && result.assets && result.assets[0]?.base64) {
+        setFoto(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'No se pudo abrir la cámara.');
+    }
+  };
+
+  const handlePickGallery = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso necesario', 'Se necesita acceso a la galería para elegir una foto de perfil.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.3,
+        base64: true,
+      });
+      if (!result.canceled && result.assets && result.assets[0]?.base64) {
+        setFoto(`data:image/jpeg;base64,${result.assets[0].base64}`);
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'No se pudo abrir la galería.');
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setFoto(null);
+  };
+
+  const handleSelectAvatar = (avId) => {
+    setSelectedAvatar(avId);
+    setFoto(null); // Al elegir avatar ilustrado, se reemplaza la foto
+  };
+
   const handleSaveProfile = async () => {
     if (!user || !uid) return;
     setSaving(true);
@@ -74,6 +125,7 @@ export default function ProfileScreen({ navigation }) {
         nombre: nombre.trim(),
         apellido: apellido.trim(),
         avatar: selectedAvatar,
+        foto: foto || null,
         edad: edad.trim(),
         tipoSangre: tipoSangre.trim().toUpperCase(),
         condiciones: condiciones.trim(),
@@ -99,6 +151,8 @@ export default function ProfileScreen({ navigation }) {
   if (!user) return <View style={styles.container}><ActivityIndicator color="#FF2D55" /></View>;
 
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${uid}&color=255-255-255&bgcolor=18-18-18`;
+
+  const activeAvatarObj = AVATARS.find(a => a.id === selectedAvatar) || AVATARS[0];
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
@@ -127,25 +181,96 @@ export default function ProfileScreen({ navigation }) {
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Avatar Selector Card */}
+        {/* Avatar & Photo Card */}
         <Animatable.View animation="fadeInDown" style={styles.card}>
-          <Text style={styles.sectionLabel}>ELEGÍ TU AVATAR</Text>
-          <View style={styles.avatarRow}>
-            {AVATARS.map((av) => {
-              const isSelected = selectedAvatar === av.id;
-              return (
-                <TouchableOpacity 
-                  key={av.id} 
-                  style={[styles.avatarOption, isSelected && { borderColor: av.color, backgroundColor: 'rgba(255,255,255,0.08)' }]} 
-                  onPress={() => setSelectedAvatar(av.id)}
-                  activeOpacity={0.8}
-                >
-                  <MaterialCommunityIcons name={av.id} size={32} color={av.color} />
-                  {isSelected && <View style={[styles.avatarDot, { backgroundColor: av.color }]} />}
-                </TouchableOpacity>
-              );
-            })}
+          <Text style={styles.sectionLabel}>TU FOTO O AVATAR</Text>
+
+          {/* Compact Preview in Center */}
+          <View style={styles.previewContainer}>
+            <View style={[styles.bigPreviewCircle, foto && styles.bigPreviewCircleWithPhoto]}>
+              {foto ? (
+                <Image source={{ uri: foto }} style={styles.previewImage} />
+              ) : (
+                <MaterialCommunityIcons name={activeAvatarObj.id} size={50} color={activeAvatarObj.color} />
+              )}
+            </View>
+            <Text style={styles.previewStatusText}>
+              {foto ? 'Foto personalizada' : `Avatar: ${activeAvatarObj.label}`}
+            </Text>
           </View>
+
+          {/* Photo Actions Row */}
+          <View style={styles.photoActionsRow}>
+            <TouchableOpacity style={styles.photoActionBtn} onPress={handleTakePhoto} activeOpacity={0.8}>
+              <MaterialCommunityIcons name="camera" size={17} color="#FFF" style={{ marginRight: 6 }} />
+              <Text style={styles.photoActionBtnText}>Tomar Foto</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.photoActionBtn} onPress={handlePickGallery} activeOpacity={0.8}>
+              <MaterialCommunityIcons name="image-outline" size={17} color="#FFF" style={{ marginRight: 6 }} />
+              <Text style={styles.photoActionBtnText}>Subir Foto</Text>
+            </TouchableOpacity>
+          </View>
+
+          {foto && (
+            <TouchableOpacity style={styles.removePhotoBtn} onPress={handleRemovePhoto}>
+              <MaterialCommunityIcons name="close-circle-outline" size={15} color="#8E8E93" style={{ marginRight: 4 }} />
+              <Text style={styles.removePhotoBtnText}>Quitar foto y usar avatar</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Collapsible Dropdown for Illustrated Avatars */}
+          <TouchableOpacity 
+            style={[styles.dropdownToggleBtn, showAvatarDropdown && styles.dropdownToggleBtnActive]} 
+            onPress={() => setShowAvatarDropdown(!showAvatarDropdown)}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <MaterialCommunityIcons name="emoticon-outline" size={20} color="#FF9500" style={{ marginRight: 8 }} />
+              <Text style={styles.dropdownToggleText}>
+                {foto ? 'Opciones de avatar ilustrado' : `Avatar: ${activeAvatarObj.label}`}
+              </Text>
+            </View>
+            <MaterialCommunityIcons 
+              name={showAvatarDropdown ? 'chevron-up' : 'chevron-down'} 
+              size={20} 
+              color="#8E8E93" 
+            />
+          </TouchableOpacity>
+
+          {showAvatarDropdown && (
+            <Animatable.View animation="fadeIn" duration={200} style={styles.dropdownContent}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.avatarHorizontalScroll}
+              >
+                {AVATARS.map((av) => {
+                  const isSelected = !foto && selectedAvatar === av.id;
+                  return (
+                    <TouchableOpacity 
+                      key={av.id} 
+                      style={[
+                        styles.avatarCompactItem, 
+                        isSelected && { borderColor: av.color, backgroundColor: 'rgba(255,255,255,0.08)' }
+                      ]} 
+                      onPress={() => {
+                        handleSelectAvatar(av.id);
+                        setShowAvatarDropdown(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons name={av.id} size={28} color={av.color} />
+                      <Text style={[styles.avatarLabel, isSelected && { color: '#FFF', fontWeight: '700' }]}>
+                        {av.label}
+                      </Text>
+                      {isSelected && <View style={[styles.avatarDot, { backgroundColor: av.color }]} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </Animatable.View>
+          )}
         </Animatable.View>
 
         {/* Basic Info Card */}
@@ -290,15 +415,34 @@ const styles = StyleSheet.create({
   
   scrollContent: { padding: 20, paddingBottom: 60 },
 
-  card: { backgroundColor: '#121212', borderRadius: 20, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  card: { backgroundColor: '#121212', borderRadius: 22, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   sectionLabel: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 12 },
   sectionDesc: { color: '#666', fontSize: 12, lineHeight: 18, marginBottom: 16 },
 
-  // Avatar Row
-  avatarRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  avatarOption: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent', position: 'relative' },
-  avatarDot: { position: 'absolute', bottom: -2, width: 8, height: 8, borderRadius: 4 },
+  // Big Preview
+  previewContainer: { alignItems: 'center', marginVertical: 10 },
+  bigPreviewCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#181818', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
+  bigPreviewCircleWithPhoto: { borderColor: '#34C759' },
+  previewImage: { width: '100%', height: '100%' },
+  previewStatusText: { color: '#8E8E93', fontSize: 13, fontWeight: '600', marginTop: 8 },
+
+  // Photo Action Buttons
+  photoActionsRow: { flexDirection: 'row', gap: 10, marginTop: 12, marginBottom: 4 },
+  photoActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E1E1E', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  photoActionBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  removePhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginTop: 4 },
+  removePhotoBtnText: { color: '#8E8E93', fontSize: 12, fontWeight: '600' },
+
+  // Dropdown for Avatars
+  dropdownToggleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#181818', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, marginTop: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  dropdownToggleBtnActive: { borderColor: '#FF9500', backgroundColor: 'rgba(255, 149, 0, 0.08)' },
+  dropdownToggleText: { color: '#EEE', fontSize: 13, fontWeight: '700' },
+  dropdownContent: { marginTop: 10, paddingVertical: 6 },
+  avatarHorizontalScroll: { paddingVertical: 4, gap: 10 },
+  avatarCompactItem: { width: 78, backgroundColor: '#181818', borderRadius: 16, paddingVertical: 10, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', position: 'relative' },
+  avatarLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginTop: 4 },
+  avatarDot: { position: 'absolute', top: 5, right: 5, width: 6, height: 6, borderRadius: 3 },
 
   // Inputs
   row: { flexDirection: 'row' },

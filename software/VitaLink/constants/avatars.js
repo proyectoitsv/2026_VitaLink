@@ -1,0 +1,17 @@
+export const AVATARS = [
+  { id: 'account-circle', label: 'Clásico', color: '#0A84FF' },
+  { id: 'face-man-profile', label: 'Hombre', color: '#30D158' },
+  { id: 'face-woman-profile', label: 'Mujer', color: '#FF375F' },
+  { id: 'face-man-shimmer', label: 'Abuelo', color: '#FF9500' },
+  { id: 'face-woman-shimmer', label: 'Abuela', color: '#AF52DE' },
+  { id: 'account-tie', label: 'Formal', color: '#5AC8FA' },
+  { id: 'shield-account', label: 'Protección', color: '#FF2D55' },
+  { id: 'medical-bag', label: 'Clínico', color: '#64D2FF' },
+  { id: 'heart-pulse', label: 'Cardio', color: '#34C759' },
+  { id: 'emoticon-happy-outline', label: 'Alegre', color: '#FFD60A' },
+  { id: 'emoticon-cool-outline', label: 'Tranquilo', color: '#30B0C7' },
+  { id: 'star-face', label: 'Estrella', color: '#FFCC00' },
+  { id: 'cat', label: 'Gatito', color: '#FF6B6B' },
+  { id: 'dog', label: 'Perrito', color: '#E5A93B' },
+  { id: 'leaf', label: 'Zen', color: '#4CD964' },
+];
