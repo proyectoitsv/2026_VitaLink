@@ -35,7 +35,7 @@ export default function RoleSelectionScreen({ navigation }) {
         <TouchableOpacity 
           style={styles.cardButton} 
           activeOpacity={0.7}
-          onPress={() => navigation.navigate('FamilyLogin')}
+          onPress={() => navigation.navigate('FamilyPatients')}
         >
           <View style={[styles.iconCircle, {backgroundColor: '#1A2A2A'}]}>
             <MaterialCommunityIcons name="account-supervisor" size={32} color="#43A047" />

@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import RoleSelectionScreen from './screens/RoleSelectionScreen';
 import PatientScreen from './screens/PatientScreen';
 import FamilyLoginScreen from './screens/FamilyLoginScreen';
+import FamilyPatientsScreen from './screens/FamilyPatientsScreen';
 import FamilyDashboardScreen from './screens/FamilyDashboardScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import QRScannerScreen from './screens/QRScannerScreen';
@@ -35,9 +36,14 @@ export default function App() {
           options={{ title: 'Modo Paciente' }} 
         />
         <Stack.Screen 
+          name="FamilyPatients" 
+          component={FamilyPatientsScreen} 
+          options={{ headerShown: false }} 
+        />
+        <Stack.Screen 
           name="FamilyLogin" 
           component={FamilyLoginScreen} 
-          options={{ title: 'Acceso Familiar' }} 
+          options={{ title: 'Vincular Paciente', headerShown: false }} 
         />
         <Stack.Screen 
           name="FamilyDashboard" 

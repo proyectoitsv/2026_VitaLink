@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform,
 import { BleManager } from 'react-native-ble-plx';
 import { decode as decodeBase64 } from 'base-64';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
-import { getFirestore, collection, addDoc, setDoc, doc, serverTimestamp } from '@react-native-firebase/firestore';
+import { getFirestore, collection, addDoc, setDoc, doc, serverTimestamp, onSnapshot } from '@react-native-firebase/firestore';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
@@ -30,6 +30,7 @@ export default function PatientScreen({ navigation }) {
   const [alertaSOS, setAlertaSOS] = useState('0');
 
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState({ nombre: '', apellido: '', avatar: 'account-circle' });
   const [location, setLocation] = useState(null);
   const db = getFirestore();
   const userRef = useRef(null);
@@ -47,12 +48,26 @@ export default function PatientScreen({ navigation }) {
   useEffect(() => {
     const auth = getAuth();
     signInAnonymously(auth);
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    let unsubProfile = () => {};
+
+    const unsubAuth = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
-        await setDoc(doc(db, 'pacientes', u.uid.substring(0, 8)), {
+        const uid = u.uid.substring(0, 8);
+        await setDoc(doc(db, 'pacientes', uid), {
           creado: serverTimestamp(),
           activo: true
+        }, { merge: true });
+
+        unsubProfile = onSnapshot(doc(db, 'pacientes', uid), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            setProfile({
+              nombre: data.nombre || '',
+              apellido: data.apellido || '',
+              avatar: data.avatar || 'account-circle'
+            });
+          }
         });
       }
     });
@@ -92,7 +107,7 @@ export default function PatientScreen({ navigation }) {
       }
     }, 5000);
 
-    return () => { unsub(); clearInterval(interval); };
+    return () => { unsubAuth(); unsubProfile(); clearInterval(interval); };
   }, []);
 
   const requestPermissions = async () => {
@@ -218,6 +233,14 @@ export default function PatientScreen({ navigation }) {
     1: { transform: [{ scale: 1 }], opacity: 0.7 }
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 13) return { text: 'Buen día', icon: 'weather-sunny' };
+    if (hour >= 13 && hour < 20) return { text: 'Buenas tardes', icon: 'weather-sunset' };
+    return { text: 'Buenas noches', icon: 'weather-night' };
+  };
+  const greeting = getGreeting();
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#050505" />
@@ -225,12 +248,17 @@ export default function PatientScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.headerSubtitle}>MONITOR EN VIVO</Text>
-            <View style={styles.codeRow}>
-              <Text style={styles.headerTitle}>Paciente </Text>
-              <Text style={styles.codeHighlight}>{user ? user.uid.substring(0, 8) : '...'}</Text>
+          <View style={styles.avatarCircle}>
+            <MaterialCommunityIcons name={profile.avatar || 'account-circle'} size={36} color="#FF2D55" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={styles.greetingRow}>
+              <MaterialCommunityIcons name={greeting.icon} size={14} color="#FF9500" style={{ marginRight: 5 }} />
+              <Text style={styles.headerSubtitle}>{greeting.text.toUpperCase()}</Text>
             </View>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {profile.nombre ? profile.nombre.trim().split(' ')[0] : `Paciente ${user ? user.uid.substring(0, 8) : '...'}`}
+            </Text>
           </View>
           <Animatable.View 
             animation={isScanning || isConnecting ? 'flash' : undefined} 
@@ -239,7 +267,7 @@ export default function PatientScreen({ navigation }) {
           />
         </View>
         <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('Profile')}>
-          <MaterialCommunityIcons name="cog" size={26} color="#8E8E93" />
+          <MaterialCommunityIcons name="cog" size={24} color="#8E8E93" />
         </TouchableOpacity>
       </View>
 
@@ -345,13 +373,13 @@ const styles = StyleSheet.create({
   
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20 },
-  headerContent: { flexDirection: 'row', flex: 1, justifyContent: 'space-between' },
-  headerSubtitle: { color: '#8E8E93', fontSize: 13, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 },
-  codeRow: { flexDirection: 'row', alignItems: 'baseline' },
-  headerTitle: { color: '#FFFFFF', fontSize: 28, fontWeight: '300' },
-  codeHighlight: { color: '#FF2D55', fontSize: 28, fontWeight: '700', letterSpacing: 1 },
-  statusDot: { width: 14, height: 14, borderRadius: 7, marginTop: 8, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
-  profileBtn: { marginLeft: 20, marginTop: 4, padding: 8, backgroundColor: '#1A1A1A', borderRadius: 20 },
+  headerContent: { flexDirection: 'row', flex: 1, alignItems: 'center' },
+  avatarCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#161616', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  greetingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  headerSubtitle: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
+  headerTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', letterSpacing: 0.3 },
+  statusDot: { width: 12, height: 12, borderRadius: 6, marginLeft: 10, shadowColor: '#FFF', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.3, shadowRadius: 8 },
+  profileBtn: { marginLeft: 16, padding: 8, backgroundColor: '#1A1A1A', borderRadius: 20 },
 
   // Content
   content: { flex: 1, paddingHorizontal: 20 },
