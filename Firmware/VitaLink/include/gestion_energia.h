@@ -12,7 +12,7 @@
 // ---------------------------------------------------------
 // CONSTANTES PÚBLICAS 
 // ---------------------------------------------------------
-#define PIN_ADC     29   // Pin del divisor de voltaje 
+#define PIN_ADC   A3   // Pin del divisor de voltaje 
 
 // ---------------------------------------------------------
 // DECLARACIÓN DE FUNCIONES PÚBLICAS
