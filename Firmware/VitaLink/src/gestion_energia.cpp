@@ -12,14 +12,24 @@
 #define Cambio_de_fase_2 1.9 // Variable que define cuando hacer el segundo cambio de fase.
 #define Minima_Tension 1.6 //Valor de tensión minimo de la bateria.
 
+
 // Variable donde se almacena el valor de tensión entrante.
 static float Tension_bruto;
 // Variable donde se almacena el valor de tensión despues de un calculo (dando un valores entre 4.2 y 3.2).
 static float Tension; 
 // Variable donde se almacena el porcentaje de bateria.
 static float Porcentaje_bruto;
-// Variable donde se almacena el porcentaje de bateria redondeado a multiplos de 10.
+// Variable donde se almacena el porcentaje de bateria redondeado a multiplos de 5.
 static float Porcentaje_redondeado;
+// Variable que fuerza la primera lectura del umbral de porcentaje de bateria.
+static float Tension_frontera = 0.0;
+// Variable que almacena el porcentaje final de la bateria.
+static float Porcentaje_final = 0.0;
+// Permite la primera lectura de la bateria para establecer el umbral de porcentaje de bateria.
+static bool  Primera_lectura = true;
+// Variable que define el margen de tolerancia (20 mV) para cambiar el porcentaje de batería.
+const float Margen_V = 0.02;   
+
 
 void inicializarModulo(){
  pinMode(PIN_ADC, INPUT);
@@ -41,13 +51,27 @@ if (Tension <= Cambio_de_fase_2) conversion (Cambio_de_fase_2, Minima_Tension, 5
 }
 
 void redondeoPorcentaje(){
-Porcentaje_redondeado = round (Porcentaje_bruto/10) * 10;
+    Porcentaje_redondeado = round(Porcentaje_bruto / 5.0) * 5.0;
+
+    if (Primera_lectura) {
+        Porcentaje_final = Porcentaje_redondeado;
+        Tension_frontera = Tension;
+        Primera_lectura = false;
+        return;
+    }
+    if (Porcentaje_redondeado != Porcentaje_final) {
+        if (fabs(Tension - Tension_frontera) >= Margen_V) {
+            Porcentaje_final = Porcentaje_redondeado;
+            Tension_frontera = Tension; 
+        }
+    }
 }
+
 
 int llamarParaPorcentaje(){
 leerVoltajeBateria();
 voltajeAPorcentaje();
 redondeoPorcentaje();
-return Porcentaje_redondeado;
+return Porcentaje_final;
 }
 
