@@ -3,9 +3,6 @@
 
 #include <Arduino.h>
 
-void inicializarBLE();
-void manejarDesconexionBLE();
-
 extern bool dispositivoConectado;
 extern bool dispositivoDesconectandose;
 

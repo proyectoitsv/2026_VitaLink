@@ -1,16 +1,22 @@
 #include "servidor_ble.h"
+#include "ota.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <stdlib.h>
+#include <string.h>
 
 // UUIDs personalizados para VitaLink
-#define SERVICIO_VITALINK_UUID      "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CARACTERISTICA_BPM_UUID     "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-#define CARACTERISTICA_SPO2_UUID    "beb5483e-36e1-4688-b7f5-ea07361b26a9"
-#define CARACTERISTICA_BAT_UUID     "beb5483e-36e1-4688-b7f5-ea07361b26aa"
-#define CARACTERISTICA_CAIDA_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26ab"
-#define CARACTERISTICA_SOS_UUID     "beb5483e-36e1-4688-b7f5-ea07361b26ac"
+#define SERVICIO_VITALINK_UUID          "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CARACTERISTICA_BPM_UUID         "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define CARACTERISTICA_SPO2_UUID        "beb5483e-36e1-4688-b7f5-ea07361b26a9"
+#define CARACTERISTICA_BAT_UUID         "beb5483e-36e1-4688-b7f5-ea07361b26aa"
+#define CARACTERISTICA_CAIDA_UUID       "beb5483e-36e1-4688-b7f5-ea07361b26ab"
+#define CARACTERISTICA_SOS_UUID         "beb5483e-36e1-4688-b7f5-ea07361b26ac"
+#define CARACTERISTICA_OTA_VERSION_UUID "beb5483e-36e1-4688-b7f5-ea07361b26ad"
+#define CARACTERISTICA_OTA_CONTROL_UUID "beb5483e-36e1-4688-b7f5-ea07361b26ae"
+#define CARACTERISTICA_OTA_DATOS_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26af"
 
 bool dispositivoConectado = false;
 bool dispositivoDesconectandose = false;
@@ -21,6 +27,18 @@ static BLECharacteristic* pCharSpO2 = NULL;
 static BLECharacteristic* pCharBat = NULL;
 static BLECharacteristic* pCharCaida = NULL;
 static BLECharacteristic* pCharSOS = NULL;
+static BLECharacteristic* pCharOTAVersion = NULL;
+static BLECharacteristic* pCharOTAControl = NULL;
+static BLECharacteristic* pCharOTADatos = NULL;
+
+static int ultimoPorcentajeOTA = -1;
+
+static void enviarEstadoOTABLE(const char* estado) {
+    if (dispositivoConectado && pCharOTAControl != NULL) {
+        pCharOTAControl->setValue((uint8_t*)estado, strlen(estado));
+        pCharOTAControl->notify();
+    }
+}
 
 class MisCallbacksServidor: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -29,6 +47,63 @@ class MisCallbacksServidor: public BLEServerCallbacks {
     void onDisconnect(BLEServer* pServer) {
         dispositivoConectado = false;
         dispositivoDesconectandose = true;
+        if (estaActualizandoOTA()) {
+            cancelarActualizacionOTA();
+        }
+    }
+};
+
+class CallbacksOTAControl: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) {
+        uint8_t* pData = pCharacteristic->getData();
+        size_t len = pCharacteristic->getLength();
+        if (pData == NULL || len == 0) return;
+
+        char comando[32];
+        size_t copiaLen = (len < sizeof(comando) - 1) ? len : (sizeof(comando) - 1);
+        memcpy(comando, pData, copiaLen);
+        comando[copiaLen] = '\0';
+
+        if (strncmp(comando, "OPEN:", 5) == 0) {
+            size_t tamano = (size_t)atol(comando + 5);
+            ultimoPorcentajeOTA = 0;
+            if (iniciarActualizacionOTA(tamano)) {
+                enviarEstadoOTABLE("READY");
+            } else {
+                enviarEstadoOTABLE("ERR_BEGIN");
+            }
+        }
+        else if (strncmp(comando, "DONE", 4) == 0) {
+            if (finalizarActualizacionOTA()) {
+                enviarEstadoOTABLE("OK");
+            } else {
+                enviarEstadoOTABLE("ERR_END");
+            }
+        }
+        else if (strncmp(comando, "ABORT", 5) == 0) {
+            cancelarActualizacionOTA();
+            enviarEstadoOTABLE("ABORTED");
+        }
+    }
+};
+
+class CallbacksOTADatos: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) {
+        uint8_t* pData = pCharacteristic->getData();
+        size_t len = pCharacteristic->getLength();
+
+        if (!escribirBloqueOTA(pData, len)) {
+            enviarEstadoOTABLE("ERR_WRITE");
+            return;
+        }
+
+        int progreso = obtenerProgresoOTA();
+        if (progreso - ultimoPorcentajeOTA >= 5 || progreso == 100) {
+            ultimoPorcentajeOTA = progreso;
+            char buffer[16];
+            snprintf(buffer, sizeof(buffer), "PROG:%d", progreso);
+            enviarEstadoOTABLE(buffer);
+        }
     }
 };
 
@@ -38,7 +113,8 @@ void inicializarBLE() {
     pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MisCallbacksServidor());
     
-    BLEService *pService = pServer->createService(SERVICIO_VITALINK_UUID);
+    // Se reservan 30 handles para soportar todos los buzones de sensores y los 3 de OTA
+    BLEService *pService = pServer->createService(BLEUUID(SERVICIO_VITALINK_UUID), 30);
     
     // Crear los 5 buzones con permisos de Lectura (READ) y Notificación Push (NOTIFY)
     pCharBPM = pService->createCharacteristic(CARACTERISTICA_BPM_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
@@ -55,6 +131,17 @@ void inicializarBLE() {
     
     pCharSOS = pService->createCharacteristic(CARACTERISTICA_SOS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pCharSOS->addDescriptor(new BLE2902());
+
+    // Buzones para consultar versión y recibir actualización OTA por BLE
+    pCharOTAVersion = pService->createCharacteristic(CARACTERISTICA_OTA_VERSION_UUID, BLECharacteristic::PROPERTY_READ);
+    pCharOTAVersion->setValue(VERSION_FIRMWARE);
+
+    pCharOTAControl = pService->createCharacteristic(CARACTERISTICA_OTA_CONTROL_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+    pCharOTAControl->addDescriptor(new BLE2902());
+    pCharOTAControl->setCallbacks(new CallbacksOTAControl());
+
+    pCharOTADatos = pService->createCharacteristic(CARACTERISTICA_OTA_DATOS_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+    pCharOTADatos->setCallbacks(new CallbacksOTADatos());
     
     pService->start(); // Abrimos el edificio
     
@@ -72,10 +159,6 @@ void manejarDesconexionBLE() {
         dispositivoDesconectandose = false;
     }
 }
-
-// ---------------------------------------------------------
-// FUNCIONES DE ENVÍO DE DATOS
-// ---------------------------------------------------------
 
 void enviarLatidosBLE(int bpm) {
     if (dispositivoConectado) {
