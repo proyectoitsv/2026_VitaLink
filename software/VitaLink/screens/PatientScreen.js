@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar, Image, Vibration, AppState } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar, Image, Vibration, AppState, Modal } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
-import { decode as decodeBase64 } from 'base-64';
+import { decode as decodeBase64, encode as encodeBase64 } from 'base-64';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
-import { getFirestore, collection, addDoc, setDoc, doc, serverTimestamp, onSnapshot } from '@react-native-firebase/firestore';
+import { getFirestore, collection, addDoc, setDoc, getDoc, doc, serverTimestamp, onSnapshot } from '@react-native-firebase/firestore';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 
 const bleManager = new BleManager();
 const VITALINK_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-const BPM_CHAR_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
-const SPO2_CHAR_UUID  = 'beb5483e-36e1-4688-b7f5-ea07361b26a9';
-const BAT_CHAR_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26aa';
-const CAIDA_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26ab';
-const SOS_CHAR_UUID   = 'beb5483e-36e1-4688-b7f5-ea07361b26ac';
+const BPM_CHAR_UUID         = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
+const SPO2_CHAR_UUID        = 'beb5483e-36e1-4688-b7f5-ea07361b26a9';
+const BAT_CHAR_UUID         = 'beb5483e-36e1-4688-b7f5-ea07361b26aa';
+const CAIDA_CHAR_UUID       = 'beb5483e-36e1-4688-b7f5-ea07361b26ab';
+const SOS_CHAR_UUID         = 'beb5483e-36e1-4688-b7f5-ea07361b26ac';
+const OTA_VERSION_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26ad';
+const OTA_CONTROL_CHAR_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26ae';
+const OTA_DATA_CHAR_UUID    = 'beb5483e-36e1-4688-b7f5-ea07361b26af';
 
 export default function PatientScreen({ navigation }) {
   const [isScanning, setIsScanning] = useState(false);
@@ -29,6 +32,14 @@ export default function PatientScreen({ navigation }) {
   const [bateria, setBateria] = useState('--');
   const [alertaCaida, setAlertaCaida] = useState('0');
   const [alertaSOS, setAlertaSOS] = useState('0');
+
+  // Estados OTA
+  const [firmwareVersion, setFirmwareVersion] = useState('--');
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [showOtaModal, setShowOtaModal] = useState(false);
+  const [otaStatus, setOtaStatus] = useState('idle'); // 'idle' | 'checking' | 'up_to_date' | 'available' | 'downloading' | 'transferring' | 'completed' | 'error'
+  const [otaProgress, setOtaProgress] = useState(0);
+  const [otaMessage, setOtaMessage] = useState('');
 
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState({ nombre: '', apellido: '', avatar: 'account-circle', foto: null });
@@ -46,6 +57,8 @@ export default function PatientScreen({ navigation }) {
   const autoReconnectTimerRef = useRef(null);
   const subscriptionsRef = useRef([]);
   const userExplicitlyDisconnectedRef = useRef(false);
+  const isUpdatingOtaRef = useRef(false);
+  const otaControlSubRef = useRef(null);
 
   useEffect(() => {
     userRef.current = user;
@@ -171,6 +184,10 @@ export default function PatientScreen({ navigation }) {
       });
       subscriptionsRef.current = [];
     }
+    if (otaControlSubRef.current) {
+      try { otaControlSubRef.current.remove(); } catch (e) {}
+      otaControlSubRef.current = null;
+    }
 
     // 2. Liberar dispositivo nativo
     if (deviceRef.current) {
@@ -193,8 +210,11 @@ export default function PatientScreen({ navigation }) {
     setBpm('--');
     setSpo2('--');
     setBateria('--');
+    setFirmwareVersion('--');
     datosRef.current = { bpm: '--', spo2: '--', bateria: '--', alertaCaida: '0', alertaSOS: '0' };
-    setDisconnectNotice(true);
+    if (!isUpdatingOtaRef.current) {
+      setDisconnectNotice(true);
+    }
 
     // 5. Auto-reconexión si corresponde
     if (allowAutoReconnect && !userExplicitlyDisconnectedRef.current) {
@@ -216,6 +236,13 @@ export default function PatientScreen({ navigation }) {
     const interval = setInterval(async () => {
       if (!isConnectedRef.current || !deviceRef.current) {
         clearInterval(interval);
+        return;
+      }
+
+      // Pausar watchdog mientras se realiza una actualización OTA por BLE
+      if (isUpdatingOtaRef.current) {
+        pingFailures = 0;
+        lastDataTimestampRef.current = Date.now();
         return;
       }
 
@@ -381,11 +408,36 @@ export default function PatientScreen({ navigation }) {
       await new Promise(resolve => setTimeout(resolve, 800));
       await activeDevice.discoverAllServicesAndCharacteristics();
 
+      // Negociar MTU para permitir bloques grandes en OTA
+      try {
+        await activeDevice.requestMTU(256);
+      } catch (mtuErr) {
+        console.warn('No se pudo negociar MTU 256:', mtuErr);
+      }
+
+      // Leer la versión actual del firmware de la pulsera
+      try {
+        const versionChar = await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
+        if (versionChar?.value) {
+          const decodedVer = decodeBase64(versionChar.value).trim();
+          if (decodedVer) {
+            setFirmwareVersion(decodedVer);
+          }
+        }
+      } catch (verErr) {
+        console.log('Característica de versión OTA no disponible aún:', verErr.message);
+      }
+
       isConnectedRef.current = true;
       setConnected(true);
       setIsConnecting(false);
       setDisconnectNotice(false);
       lastDataTimestampRef.current = Date.now();
+      if (isUpdatingOtaRef.current) {
+        isUpdatingOtaRef.current = false;
+        setShowOtaModal(false);
+        setOtaStatus('idle');
+      }
       
       try {
         Vibration.vibrate([0, 70, 50, 70]); // Vibración sutil de éxito
@@ -482,6 +534,251 @@ export default function PatientScreen({ navigation }) {
       console.warn('Error connectToDevice:', e);
       setIsConnecting(false);
       handleDisconnection(true);
+    }
+  };
+
+  // Comparar si la versión remota de Firestore es mayor/distinta a la actual de la pulsera
+  const isRemoteVersionNewer = (remoteVer, currentVer) => {
+    if (!remoteVer) return false;
+    if (!currentVer || currentVer === '--') return true;
+    const cleanRemote = String(remoteVer).replace(/^v/i, '').trim();
+    const cleanCurrent = String(currentVer).replace(/^v/i, '').trim();
+    if (cleanRemote === cleanCurrent) return false;
+    const rParts = cleanRemote.split('.').map(n => parseInt(n, 10) || 0);
+    const cParts = cleanCurrent.split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(rParts.length, cParts.length); i++) {
+      const r = rParts[i] || 0;
+      const c = cParts[i] || 0;
+      if (r > c) return true;
+      if (r < c) return false;
+    }
+    return cleanRemote !== cleanCurrent;
+  };
+
+  const checkFirmwareUpdate = async () => {
+    if (!connected || !deviceRef.current) return;
+    setOtaStatus('checking');
+    setOtaMessage('Buscando actualizaciones en la nube...');
+    setShowOtaModal(true);
+
+    try {
+      // Refrescar lectura de versión por BLE antes de comparar
+      let currentVer = firmwareVersion;
+      try {
+        const versionChar = await deviceRef.current.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
+        if (versionChar?.value) {
+          const decoded = decodeBase64(versionChar.value).trim();
+          if (decoded) {
+            currentVer = decoded;
+            setFirmwareVersion(decoded);
+          }
+        }
+      } catch (e) {}
+
+      const snap = await getDoc(doc(db, 'configuracion', 'firmware_actual'));
+      if (!snap.exists()) {
+        setOtaStatus('up_to_date');
+        setOtaMessage('No hay actualizaciones publicadas en el servidor.');
+        return;
+      }
+
+      const data = snap.data();
+      if (data && data.version && data.url && isRemoteVersionNewer(data.version, currentVer)) {
+        setUpdateInfo({
+          version: data.version,
+          url: data.url,
+          notas: data.notas || 'Mejoras de rendimiento y estabilidad para tu pulsera VitaLink.'
+        });
+        setOtaStatus('available');
+        setOtaMessage('');
+      } else {
+        setUpdateInfo(null);
+        setOtaStatus('up_to_date');
+        setOtaMessage(`Tu pulsera ya cuenta con la última versión disponible (v${currentVer !== '--' ? currentVer : data?.version || '1.0.0'}).`);
+      }
+    } catch (err) {
+      console.error('Error consultando firmware_actual:', err);
+      setOtaStatus('error');
+      setOtaMessage('No se pudo verificar la actualización. Comprobá tu conexión a internet.');
+    }
+  };
+
+  const startOtaUpdate = async () => {
+    if (!deviceRef.current || !updateInfo?.url) return;
+    const activeDevice = deviceRef.current;
+
+    isUpdatingOtaRef.current = true;
+    setOtaStatus('downloading');
+    setOtaProgress(0);
+    setOtaMessage('Descargando firmware desde la nube...');
+
+    let readyResolve = null;
+    let readyReject = null;
+    let okResolve = null;
+    let okReject = null;
+
+    try {
+      // 1. Descargar el archivo .bin como ArrayBuffer / Uint8Array
+      const response = await fetch(updateInfo.url);
+      if (!response.ok) {
+        throw new Error(`Error al descargar el binario (HTTP ${response.status})`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const firmwareBytes = new Uint8Array(arrayBuffer);
+      const totalBytes = firmwareBytes.byteLength;
+
+      if (totalBytes === 0) {
+        throw new Error('El archivo de firmware descargado está vacío.');
+      }
+
+      // 2. Negociar MTU antes de transferir
+      try {
+        await activeDevice.requestMTU(256);
+      } catch (e) {}
+
+      // 3. Suscribirse a OTA_CONTROL_CHAR_UUID para escuchar READY, PROG, OK y errores
+      if (otaControlSubRef.current) {
+        try { otaControlSubRef.current.remove(); } catch (e) {}
+        otaControlSubRef.current = null;
+      }
+
+      const readyPromise = new Promise((resolve, reject) => {
+        readyResolve = resolve;
+        readyReject = reject;
+      });
+      const okPromise = new Promise((resolve, reject) => {
+        okResolve = resolve;
+        okReject = reject;
+      });
+
+      otaControlSubRef.current = bleManager.monitorCharacteristicForDevice(
+        activeDevice.id,
+        VITALINK_SERVICE_UUID,
+        OTA_CONTROL_CHAR_UUID,
+        (error, characteristic) => {
+          if (error) return;
+          if (characteristic?.value) {
+            lastDataTimestampRef.current = Date.now();
+            const msg = decodeBase64(characteristic.value).trim();
+            console.log('📡 Notificación OTA Control:', msg);
+
+            if (msg === 'READY') {
+              if (readyResolve) readyResolve(true);
+            } else if (msg.startsWith('PROG:')) {
+              const progVal = parseInt(msg.split(':')[1], 10);
+              if (!isNaN(progVal)) {
+                setOtaProgress(progVal);
+              }
+            } else if (msg === 'OK') {
+              if (okResolve) okResolve(true);
+            } else if (msg === 'ERR_BEGIN' || msg === 'ERR_WRITE' || msg === 'ERR_END') {
+              const errObj = new Error(`La pulsera reportó un fallo de actualización (${msg})`);
+              if (readyReject) readyReject(errObj);
+              if (okReject) okReject(errObj);
+            }
+          }
+        }
+      );
+
+      // 4. Enviar comando OPEN:<tamaño> en Base64
+      setOtaMessage('Preparando memoria Flash de la pulsera...');
+      const openCmd = encodeBase64(`OPEN:${totalBytes}`);
+      await activeDevice.writeCharacteristicWithResponseForService(
+        VITALINK_SERVICE_UUID,
+        OTA_CONTROL_CHAR_UUID,
+        openCmd
+      );
+
+      // 5. Esperar confirmación READY de la pulsera (máx 10s)
+      await Promise.race([
+        readyPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Tiempo de espera agotado esperando READY de la pulsera')), 10000))
+      ]);
+
+      // 6. Enviar bloques de 180 bytes codificados en Base64 a OTA_DATA_CHAR_UUID
+      setOtaStatus('transferring');
+      setOtaMessage('Transfiriendo actualización por Bluetooth... No apagues la pulsera.');
+
+      const CHUNK_SIZE = 180;
+      for (let offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
+        if (!isConnectedRef.current) {
+          throw new Error('Se interrumpió la conexión Bluetooth durante la transferencia.');
+        }
+
+        const end = Math.min(offset + CHUNK_SIZE, totalBytes);
+        const chunk = firmwareBytes.subarray(offset, end);
+
+        let binaryStr = '';
+        for (let i = 0; i < chunk.length; i++) {
+          binaryStr += String.fromCharCode(chunk[i]);
+        }
+        const base64Block = encodeBase64(binaryStr);
+
+        await activeDevice.writeCharacteristicWithResponseForService(
+          VITALINK_SERVICE_UUID,
+          OTA_DATA_CHAR_UUID,
+          base64Block
+        );
+
+        lastDataTimestampRef.current = Date.now();
+        const localPct = Math.min(100, Math.round((end / totalBytes) * 100));
+        setOtaProgress(localPct);
+      }
+
+      // 7. Enviar comando DONE a OTA_CONTROL_CHAR_UUID y esperar OK
+      setOtaMessage('Verificando integridad del firmware...');
+      const doneCmd = encodeBase64('DONE');
+      await activeDevice.writeCharacteristicWithResponseForService(
+        VITALINK_SERVICE_UUID,
+        OTA_CONTROL_CHAR_UUID,
+        doneCmd
+      );
+
+      await Promise.race([
+        okPromise,
+        new Promise((resolve) => setTimeout(() => resolve(true), 5000))
+      ]);
+
+      // 8. Éxito: mostrar mensaje de reinicio
+      setOtaProgress(100);
+      setOtaStatus('completed');
+      setOtaMessage('Actualización completada, reiniciando pulsera...');
+      setFirmwareVersion(updateInfo.version);
+
+      try {
+        Vibration.vibrate([0, 100, 80, 150]);
+      } catch (e) {}
+
+      if (otaControlSubRef.current) {
+        try { otaControlSubRef.current.remove(); } catch (e) {}
+        otaControlSubRef.current = null;
+      }
+
+      setTimeout(() => {
+        isUpdatingOtaRef.current = false;
+        setShowOtaModal(false);
+        setOtaStatus('idle');
+      }, 4500);
+
+    } catch (err) {
+      console.error('Error en transferencia OTA:', err);
+      try {
+        const abortCmd = encodeBase64('ABORT');
+        await activeDevice.writeCharacteristicWithResponseForService(
+          VITALINK_SERVICE_UUID,
+          OTA_CONTROL_CHAR_UUID,
+          abortCmd
+        ).catch(() => {});
+      } catch (e) {}
+
+      if (otaControlSubRef.current) {
+        try { otaControlSubRef.current.remove(); } catch (e) {}
+        otaControlSubRef.current = null;
+      }
+
+      isUpdatingOtaRef.current = false;
+      setOtaStatus('error');
+      setOtaMessage(err.message || 'Ocurrió un error durante la actualización de la pulsera.');
     }
   };
 
@@ -757,10 +1054,186 @@ export default function PatientScreen({ navigation }) {
               </Animatable.View>
             )}
 
+            {/* Tarjeta de Firmware y Actualización OTA */}
+            <View style={styles.otaSectionCard}>
+              <View style={styles.otaVersionRow}>
+                <View style={styles.otaVersionBadge}>
+                  <MaterialCommunityIcons name="chip" size={18} color="#FF2D55" style={{ marginRight: 8 }} />
+                  <Text style={styles.otaVersionText}>
+                    Versión de pulsera: <Text style={styles.otaVersionHighlight}>v{firmwareVersion}</Text>
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.otaCheckBtn}
+                onPress={checkFirmwareUpdate}
+                disabled={otaStatus === 'checking' || otaStatus === 'downloading' || otaStatus === 'transferring'}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="cloud-download-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.otaCheckBtnText}>Buscar actualización de pulsera</Text>
+              </TouchableOpacity>
+            </View>
+
           </Animatable.View>
         )}
 
       </View>
+
+      {/* Modal Animado de Actualización OTA */}
+      <Modal
+        visible={showOtaModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (otaStatus !== 'downloading' && otaStatus !== 'transferring') {
+            setShowOtaModal(false);
+          }
+        }}
+      >
+        <View style={styles.otaModalOverlay}>
+          <Animatable.View animation="zoomIn" duration={350} style={styles.otaModalCard}>
+            
+            {/* Encabezado del Modal */}
+            <View style={styles.otaModalHeader}>
+              <View style={styles.otaModalIconCircle}>
+                <MaterialCommunityIcons
+                  name={
+                    otaStatus === 'completed' ? 'check-decagram' :
+                    otaStatus === 'error' ? 'alert-circle-outline' :
+                    otaStatus === 'up_to_date' ? 'shield-check' :
+                    'cellphone-arrow-down'
+                  }
+                  size={28}
+                  color={
+                    otaStatus === 'completed' || otaStatus === 'up_to_date' ? '#34C759' :
+                    otaStatus === 'error' ? '#FF453A' : '#FF2D55'
+                  }
+                />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.otaModalTitle}>
+                  {otaStatus === 'checking' && 'Verificando Firmware'}
+                  {otaStatus === 'up_to_date' && 'Pulsera Actualizada'}
+                  {otaStatus === 'available' && 'Nueva Actualización Disponible'}
+                  {(otaStatus === 'downloading' || otaStatus === 'transferring') && 'Actualizando Pulsera'}
+                  {otaStatus === 'completed' && '¡Actualización Exitosa!'}
+                  {otaStatus === 'error' && 'Error de Actualización'}
+                </Text>
+                <Text style={styles.otaModalSubtitle}>
+                  Versión actual: v{firmwareVersion}
+                </Text>
+              </View>
+              {otaStatus !== 'downloading' && otaStatus !== 'transferring' && (
+                <TouchableOpacity
+                  onPress={() => setShowOtaModal(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <MaterialCommunityIcons name="close" size={22} color="#8E8E93" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Estado: Buscando en Firebase */}
+            {otaStatus === 'checking' && (
+              <View style={styles.otaStateCenter}>
+                <ActivityIndicator size="large" color="#FF2D55" style={{ marginBottom: 14 }} />
+                <Text style={styles.otaMessageText}>{otaMessage}</Text>
+              </View>
+            )}
+
+            {/* Estado: Ya está al día */}
+            {otaStatus === 'up_to_date' && (
+              <View style={styles.otaStateCenter}>
+                <Text style={styles.otaMessageText}>{otaMessage}</Text>
+                <TouchableOpacity
+                  style={styles.otaSecondaryBtn}
+                  onPress={() => setShowOtaModal(false)}
+                >
+                  <Text style={styles.otaSecondaryBtnText}>Entendido</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Estado: Nueva versión disponible */}
+            {otaStatus === 'available' && updateInfo && (
+              <Animatable.View animation="fadeIn" duration={300}>
+                <View style={styles.otaReleaseBox}>
+                  <View style={styles.otaReleaseHeader}>
+                    <Text style={styles.otaReleaseTag}>NUEVA VERSIÓN v{updateInfo.version}</Text>
+                  </View>
+                  <Text style={styles.otaReleaseNotesTitle}>Notas de la versión:</Text>
+                  <Text style={styles.otaReleaseNotesText}>{updateInfo.notas}</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.otaPrimaryBtn}
+                  onPress={startOtaUpdate}
+                  activeOpacity={0.85}
+                >
+                  <MaterialCommunityIcons name="bluetooth-transfer" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.otaPrimaryBtnText}>Actualizar Pulsera</Text>
+                </TouchableOpacity>
+              </Animatable.View>
+            )}
+
+            {/* Estado: Descargando / Transfiriendo por BLE */}
+            {(otaStatus === 'downloading' || otaStatus === 'transferring') && (
+              <View style={styles.otaProgressWrapper}>
+                <View style={styles.otaProgressHeader}>
+                  <Text style={styles.otaProgressLabel}>
+                    {otaStatus === 'downloading' ? 'Descargando paquete...' : 'Enviando bloques BLE...'}
+                  </Text>
+                  <Text style={styles.otaProgressPercent}>{otaProgress}%</Text>
+                </View>
+
+                <View style={styles.otaProgressBarBg}>
+                  <View style={[styles.otaProgressBarFill, { width: `${otaProgress}%` }]} />
+                </View>
+
+                <Text style={styles.otaMessageText}>{otaMessage}</Text>
+              </View>
+            )}
+
+            {/* Estado: Completado */}
+            {otaStatus === 'completed' && (
+              <Animatable.View animation="bounceIn" style={styles.otaStateCenter}>
+                <View style={styles.otaProgressBarBg}>
+                  <View style={[styles.otaProgressBarFill, { width: '100%', backgroundColor: '#34C759' }]} />
+                </View>
+                <Text style={[styles.otaMessageText, { color: '#34C759', fontWeight: '700', marginTop: 14 }]}>
+                  {otaMessage}
+                </Text>
+              </Animatable.View>
+            )}
+
+            {/* Estado: Error */}
+            {otaStatus === 'error' && (
+              <View style={styles.otaStateCenter}>
+                <Text style={[styles.otaMessageText, { color: '#FF453A' }]}>{otaMessage}</Text>
+                <View style={styles.otaErrorActions}>
+                  <TouchableOpacity
+                    style={[styles.otaSecondaryBtn, { flex: 1, marginRight: 8 }]}
+                    onPress={() => setShowOtaModal(false)}
+                  >
+                    <Text style={styles.otaSecondaryBtnText}>Cerrar</Text>
+                  </TouchableOpacity>
+                  {updateInfo && (
+                    <TouchableOpacity
+                      style={[styles.otaPrimaryBtn, { flex: 1, marginLeft: 8, marginTop: 0 }]}
+                      onPress={startOtaUpdate}
+                    >
+                      <Text style={styles.otaPrimaryBtnText}>Reintentar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
+
+          </Animatable.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -832,8 +1305,44 @@ const styles = StyleSheet.create({
   glowSpO2: { position: 'absolute', bottom: -20, right: -20, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(50, 173, 230, 0.15)', blurRadius: 20 },
 
   // Alerta Crítica
-  alertCard: { backgroundColor: '#FF2D55', flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 24, shadowColor: '#FF2D55', shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.4, shadowRadius: 15, marginTop: 8 },
+  alertCard: { backgroundColor: '#FF2D55', flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 24, shadowColor: '#FF2D55', shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.4, shadowRadius: 15, marginTop: 8, marginBottom: 12 },
   alertTextGroup: { marginLeft: 16 },
   alertTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
   alertDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '500', marginTop: 2 },
+
+  // Sección OTA en Dashboard
+  otaSectionCard: { backgroundColor: '#121212', borderRadius: 24, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginTop: 4 },
+  otaVersionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  otaVersionBadge: { flexDirection: 'row', alignItems: 'center' },
+  otaVersionText: { color: '#8E8E93', fontSize: 13, fontWeight: '600' },
+  otaVersionHighlight: { color: '#FFFFFF', fontWeight: '800' },
+  otaCheckBtn: { backgroundColor: '#1C1C1E', borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.35)', borderRadius: 16, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  otaCheckBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+
+  // Modal OTA
+  otaModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.78)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
+  otaModalCard: { width: '100%', backgroundColor: '#141416', borderRadius: 28, padding: 24, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.6, shadowRadius: 24 },
+  otaModalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  otaModalIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255, 45, 85, 0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.25)' },
+  otaModalTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 0.2 },
+  otaModalSubtitle: { color: '#8E8E93', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  otaStateCenter: { alignItems: 'center', paddingVertical: 12 },
+  otaMessageText: { color: '#D1D1D6', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
+  otaReleaseBox: { backgroundColor: '#1C1C1E', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 18 },
+  otaReleaseHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  otaReleaseTag: { color: '#FF2D55', fontSize: 12, fontWeight: '800', letterSpacing: 0.8 },
+  otaReleaseNotesTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '700', marginBottom: 4 },
+  otaReleaseNotesText: { color: '#AEAEB2', fontSize: 13, lineHeight: 19 },
+  otaPrimaryBtn: { backgroundColor: '#FF2D55', borderRadius: 18, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, marginTop: 4 },
+  otaPrimaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: 0.4 },
+  otaSecondaryBtn: { backgroundColor: '#242426', borderRadius: 16, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16, alignItems: 'center', justifyContent: 'center' },
+  otaSecondaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  otaProgressWrapper: { paddingVertical: 8 },
+  otaProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  otaProgressLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  otaProgressPercent: { color: '#FF2D55', fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  otaProgressBarBg: { width: '100%', height: 12, backgroundColor: '#242426', borderRadius: 6, overflow: 'hidden', marginBottom: 14 },
+  otaProgressBarFill: { height: '100%', backgroundColor: '#FF2D55', borderRadius: 6 },
+  otaErrorActions: { flexDirection: 'row', width: '100%', marginTop: 16, alignItems: 'center' },
 });
+
