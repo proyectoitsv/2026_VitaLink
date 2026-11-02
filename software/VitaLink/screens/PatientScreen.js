@@ -378,14 +378,42 @@ export default function PatientScreen({ navigation }) {
     startScan(true);
   };
 
+  // Forzar limpieza de caché GATT en Android y redescubrir todas las características BLE
+  const refreshDeviceGattCache = async (targetDevice) => {
+    const devId = targetDevice?.id || lastKnownDeviceIdRef.current;
+    if (!devId) return targetDevice;
+    try {
+      await bleManager.cancelDeviceConnection(devId).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const reconnected = await bleManager.connectToDevice(devId, { refreshGatt: 'OnConnected' });
+      setDevice(reconnected);
+      deviceRef.current = reconnected;
+      reconnected.onDisconnected(() => {
+        if (!isUpdatingOtaRef.current) {
+          console.log('⚡ Pulsera desconectada físicamente');
+          handleDisconnection(true);
+        }
+      });
+      await new Promise(resolve => setTimeout(resolve, 700));
+      await reconnected.discoverAllServicesAndCharacteristics();
+      try {
+        await reconnected.requestMTU(256);
+      } catch (e) {}
+      return reconnected;
+    } catch (err) {
+      console.warn('Error al refrescar caché GATT:', err.message);
+      return targetDevice;
+    }
+  };
+
   const connectToDevice = async (scannedDevice) => {
     setIsConnecting(true);
     try {
-      // Si el dispositivo ya está conectado al OS, no forzar connect()
+      // Si el dispositivo ya está conectado al OS, usar la conexión o conectar limpiando caché GATT
       const isAlready = await scannedDevice.isConnected().catch(() => false);
       let activeDevice = scannedDevice;
       if (!isAlready) {
-        activeDevice = await scannedDevice.connect();
+        activeDevice = await scannedDevice.connect({ refreshGatt: 'OnConnected' });
       }
       setDevice(activeDevice);
       deviceRef.current = activeDevice;
@@ -415,7 +443,7 @@ export default function PatientScreen({ navigation }) {
         console.warn('No se pudo negociar MTU 256:', mtuErr);
       }
 
-      // Leer la versión actual del firmware de la pulsera
+      // Leer la versión actual del firmware de la pulsera (si falla por caché GATT vieja de Android, refrescar GATT)
       try {
         const versionChar = await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
         if (versionChar?.value) {
@@ -425,7 +453,19 @@ export default function PatientScreen({ navigation }) {
           }
         }
       } catch (verErr) {
-        console.log('Característica de versión OTA no disponible aún:', verErr.message);
+        console.log('Refrescando caché GATT para descubrir características OTA...');
+        activeDevice = await refreshDeviceGattCache(activeDevice);
+        try {
+          const retryVerChar = await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
+          if (retryVerChar?.value) {
+            const decodedVer = decodeBase64(retryVerChar.value).trim();
+            if (decodedVer) {
+              setFirmwareVersion(decodedVer);
+            }
+          }
+        } catch (retryErr) {
+          console.log('Característica de versión OTA no disponible aún:', retryErr.message);
+        }
       }
 
       isConnectedRef.current = true;
@@ -573,7 +613,19 @@ export default function PatientScreen({ navigation }) {
             setFirmwareVersion(decoded);
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        const refreshed = await refreshDeviceGattCache(deviceRef.current);
+        try {
+          const retryChar = await refreshed.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
+          if (retryChar?.value) {
+            const decoded = decodeBase64(retryChar.value).trim();
+            if (decoded) {
+              currentVer = decoded;
+              setFirmwareVersion(decoded);
+            }
+          }
+        } catch (err2) {}
+      }
 
       const snap = await getDoc(doc(db, 'configuracion', 'firmware_actual'));
       if (!snap.exists()) {
@@ -605,7 +657,7 @@ export default function PatientScreen({ navigation }) {
 
   const startOtaUpdate = async () => {
     if (!deviceRef.current || !updateInfo?.url) return;
-    const activeDevice = deviceRef.current;
+    let activeDevice = deviceRef.current;
 
     isUpdatingOtaRef.current = true;
     setOtaStatus('downloading');
@@ -631,7 +683,14 @@ export default function PatientScreen({ navigation }) {
         throw new Error('El archivo de firmware descargado está vacío.');
       }
 
-      // 2. Negociar MTU antes de transferir
+      // 2. Verificar que las características OTA estén descubiertas (o refrescar caché GATT si Android tenía la tabla vieja)
+      await activeDevice.discoverAllServicesAndCharacteristics();
+      try {
+        await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
+      } catch (gattErr) {
+        activeDevice = await refreshDeviceGattCache(activeDevice);
+      }
+
       try {
         await activeDevice.requestMTU(256);
       } catch (e) {}
@@ -680,6 +739,9 @@ export default function PatientScreen({ navigation }) {
         }
       );
 
+      // Pequeña pausa para que Android termine de habilitar el descriptor 0x2902 antes de enviar OPEN
+      await new Promise(resolve => setTimeout(resolve, 350));
+
       // 4. Enviar comando OPEN:<tamaño> en Base64
       setOtaMessage('Preparando memoria Flash de la pulsera...');
       const openCmd = encodeBase64(`OPEN:${totalBytes}`);
@@ -689,11 +751,23 @@ export default function PatientScreen({ navigation }) {
         openCmd
       );
 
+      // Fallback de lectura directa si la notificación READY ocurrió mientras se cerraba la escritura BLE
+      const pollReadyTimer = setTimeout(async () => {
+        try {
+          const ctrlChar = await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_CONTROL_CHAR_UUID);
+          if (ctrlChar?.value) {
+            const val = decodeBase64(ctrlChar.value).trim();
+            if (val === 'READY' && readyResolve) readyResolve(true);
+          }
+        } catch (e) {}
+      }, 500);
+
       // 5. Esperar confirmación READY de la pulsera (máx 10s)
       await Promise.race([
         readyPromise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Tiempo de espera agotado esperando READY de la pulsera')), 10000))
       ]);
+      clearTimeout(pollReadyTimer);
 
       // 6. Enviar bloques de 180 bytes codificados en Base64 a OTA_DATA_CHAR_UUID
       setOtaStatus('transferring');
