@@ -397,7 +397,7 @@ export default function PatientScreen({ navigation }) {
       await new Promise(resolve => setTimeout(resolve, 700));
       await reconnected.discoverAllServicesAndCharacteristics();
       try {
-        await reconnected.requestMTU(256);
+        await reconnected.requestMTU(512);
       } catch (e) {}
       return reconnected;
     } catch (err) {
@@ -436,11 +436,12 @@ export default function PatientScreen({ navigation }) {
       await new Promise(resolve => setTimeout(resolve, 800));
       await activeDevice.discoverAllServicesAndCharacteristics();
 
-      // Negociar MTU para permitir bloques grandes en OTA
+      // Negociar MTU máximo para permitir bloques grandes en OTA
       try {
-        await activeDevice.requestMTU(256);
+        const mtuDev = await activeDevice.requestMTU(512);
+        if (mtuDev) activeDevice = mtuDev;
       } catch (mtuErr) {
-        console.warn('No se pudo negociar MTU 256:', mtuErr);
+        console.warn('No se pudo negociar MTU 512:', mtuErr);
       }
 
       // Leer la versión actual del firmware de la pulsera (si falla por caché GATT vieja de Android, refrescar GATT)
@@ -691,8 +692,17 @@ export default function PatientScreen({ navigation }) {
         activeDevice = await refreshDeviceGattCache(activeDevice);
       }
 
+      let negotiatedMtu = activeDevice.mtu || 256;
       try {
-        await activeDevice.requestMTU(256);
+        const mtuDev = await activeDevice.requestMTU(512);
+        if (mtuDev?.mtu) {
+          negotiatedMtu = mtuDev.mtu;
+        }
+      } catch (e) {}
+
+      // Solicitar prioridad de conexión BLE alta (intervalo 7.5ms - 11.25ms) para máxima velocidad OTA
+      try {
+        await activeDevice.requestConnectionPriority(1);
       } catch (e) {}
 
       // 3. Suscribirse a OTA_CONTROL_CHAR_UUID para escuchar READY, PROG, OK y errores
@@ -769,11 +779,15 @@ export default function PatientScreen({ navigation }) {
       ]);
       clearTimeout(pollReadyTimer);
 
-      // 6. Enviar bloques de 180 bytes codificados en Base64 a OTA_DATA_CHAR_UUID
+      // 6. Enviar bloques grandes usando ráfagas WriteWithoutResponse + sincronización periódica WithResponse
       setOtaStatus('transferring');
-      setOtaMessage('Transfiriendo actualización por Bluetooth... No apagues la pulsera.');
+      setOtaMessage('Transfiriendo actualización rápida por Bluetooth... No apagues la pulsera.');
 
-      const CHUNK_SIZE = 180;
+      const CHUNK_SIZE = Math.min(480, Math.max(20, negotiatedMtu - 7));
+      const BURST_SYNC_EVERY = 12;
+      let chunkIndex = 0;
+      let lastReportedPct = -1;
+
       for (let offset = 0; offset < totalBytes; offset += CHUNK_SIZE) {
         if (!isConnectedRef.current) {
           throw new Error('Se interrumpió la conexión Bluetooth durante la transferencia.');
@@ -788,15 +802,30 @@ export default function PatientScreen({ navigation }) {
         }
         const base64Block = encodeBase64(binaryStr);
 
-        await activeDevice.writeCharacteristicWithResponseForService(
-          VITALINK_SERVICE_UUID,
-          OTA_DATA_CHAR_UUID,
-          base64Block
-        );
+        chunkIndex++;
+        const isLastChunk = end >= totalBytes;
+        const shouldSyncWithResponse = isLastChunk || (chunkIndex % BURST_SYNC_EVERY === 0);
+
+        if (shouldSyncWithResponse) {
+          await activeDevice.writeCharacteristicWithResponseForService(
+            VITALINK_SERVICE_UUID,
+            OTA_DATA_CHAR_UUID,
+            base64Block
+          );
+        } else {
+          await activeDevice.writeCharacteristicWithoutResponseForService(
+            VITALINK_SERVICE_UUID,
+            OTA_DATA_CHAR_UUID,
+            base64Block
+          );
+        }
 
         lastDataTimestampRef.current = Date.now();
         const localPct = Math.min(100, Math.round((end / totalBytes) * 100));
-        setOtaProgress(localPct);
+        if (localPct !== lastReportedPct) {
+          lastReportedPct = localPct;
+          setOtaProgress(localPct);
+        }
       }
 
       // 7. Enviar comando DONE a OTA_CONTROL_CHAR_UUID y esperar OK
