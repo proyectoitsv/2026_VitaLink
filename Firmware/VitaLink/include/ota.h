@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#define VERSION_FIRMWARE "1.0.0"
+extern const char* VERSION_FIRMWARE;
 
 bool iniciarActualizacionOTA(size_t tamanoTotal);
 bool escribirBloqueOTA(uint8_t* datos, size_t longitud);
