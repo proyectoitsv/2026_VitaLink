@@ -1,9 +1,11 @@
 #include "servidor_ble.h"
 #include "ota.h"
+#include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <esp_mac.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -32,6 +34,8 @@ static BLECharacteristic* pCharOTAControl = NULL;
 static BLECharacteristic* pCharOTADatos = NULL;
 
 static int ultimoPorcentajeOTA = -1;
+static unsigned long instanteConexionBLE = 0;
+static bool versionInicialEnviadaBLE = false;
 
 static void enviarEstadoOTABLE(const char* estado) {
     if (dispositivoConectado && pCharOTAControl != NULL) {
@@ -41,9 +45,17 @@ static void enviarEstadoOTABLE(const char* estado) {
 }
 
 class MisCallbacksServidor: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
+    void onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t *param) {
+        instanteConexionBLE = millis();
+        versionInicialEnviadaBLE = false;
         dispositivoConectado = true;
-    };
+        if (pCharOTAVersion != NULL) {
+            pCharOTAVersion->setValue((uint8_t*)VERSION_FIRMWARE, strlen(VERSION_FIRMWARE));
+        }
+        if (pCharOTAControl != NULL) {
+            pCharOTAControl->setValue((uint8_t*)"IDLE", 4);
+        }
+    }
     void onDisconnect(BLEServer* pServer) {
         dispositivoConectado = false;
         dispositivoDesconectandose = true;
@@ -98,7 +110,7 @@ class CallbacksOTADatos: public BLECharacteristicCallbacks {
         }
 
         int progreso = obtenerProgresoOTA();
-        if (progreso - ultimoPorcentajeOTA >= 5 || progreso == 100) {
+        if (progreso - ultimoPorcentajeOTA >= 10 || progreso == 100) {
             ultimoPorcentajeOTA = progreso;
             char buffer[16];
             snprintf(buffer, sizeof(buffer), "PROG:%d", progreso);
@@ -108,13 +120,20 @@ class CallbacksOTADatos: public BLECharacteristicCallbacks {
 };
 
 void inicializarBLE() {
+    uint8_t macBase[6];
+    if (esp_efuse_mac_get_default(macBase) == ESP_OK) {
+        macBase[5] = (uint8_t)(macBase[5] + 2);
+        esp_base_mac_addr_set(macBase);
+    }
+
     BLEDevice::init("VitaLink"); 
+    BLEDevice::setMTU(517);
     
     pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MisCallbacksServidor());
     
-    // Se reservan 30 handles para soportar todos los buzones de sensores y los 3 de OTA
-    BLEService *pService = pServer->createService(BLEUUID(SERVICIO_VITALINK_UUID), 30);
+    // Se reservan 40 handles para soportar todos los buzones de sensores y los 3 de OTA
+    BLEService *pService = pServer->createService(BLEUUID(SERVICIO_VITALINK_UUID), 40);
     
     // Crear los 5 buzones con permisos de Lectura (READ) y Notificación Push (NOTIFY)
     pCharBPM = pService->createCharacteristic(CARACTERISTICA_BPM_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
@@ -133,10 +152,10 @@ void inicializarBLE() {
     pCharSOS->addDescriptor(new BLE2902());
 
     // Buzones para consultar versión y recibir actualización OTA por BLE
-    pCharOTAVersion = pService->createCharacteristic(CARACTERISTICA_OTA_VERSION_UUID, BLECharacteristic::PROPERTY_READ);
-    pCharOTAVersion->setValue(VERSION_FIRMWARE);
+    pCharOTAVersion = pService->createCharacteristic(CARACTERISTICA_OTA_VERSION_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    pCharOTAVersion->addDescriptor(new BLE2902());
 
-    pCharOTAControl = pService->createCharacteristic(CARACTERISTICA_OTA_CONTROL_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+    pCharOTAControl = pService->createCharacteristic(CARACTERISTICA_OTA_CONTROL_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
     pCharOTAControl->addDescriptor(new BLE2902());
     pCharOTAControl->setCallbacks(new CallbacksOTAControl());
 
@@ -144,11 +163,15 @@ void inicializarBLE() {
     pCharOTADatos->setCallbacks(new CallbacksOTADatos());
     
     pService->start(); // Abrimos el edificio
+
+    // Asignar los valores iniciales una vez iniciado el servicio y registrados los handles
+    pCharOTAVersion->setValue((uint8_t*)VERSION_FIRMWARE, strlen(VERSION_FIRMWARE));
+    pCharOTAControl->setValue((uint8_t*)"IDLE", 4);
     
     BLEAdvertising *pAdvertising = BLEDevice::getAdvertising(); 
     pAdvertising->addServiceUUID(SERVICIO_VITALINK_UUID);
     pAdvertising->setAppearance(192); // Generic Watch
-    pAdvertising->addServiceUUID((uint16_t)0x180D); // Servicio de Ritmo Cardíaco
+    pAdvertising->setScanResponse(true);
     BLEDevice::startAdvertising(); 
 }
 
@@ -158,10 +181,17 @@ void manejarDesconexionBLE() {
         pServer->startAdvertising(); 
         dispositivoDesconectandose = false;
     }
+    if (dispositivoConectado && !versionInicialEnviadaBLE && (millis() - instanteConexionBLE >= 2500)) {
+        versionInicialEnviadaBLE = true;
+        if (pCharOTAVersion != NULL) {
+            pCharOTAVersion->setValue((uint8_t*)VERSION_FIRMWARE, strlen(VERSION_FIRMWARE));
+            pCharOTAVersion->notify();
+        }
+    }
 }
 
 void enviarLatidosBLE(int bpm) {
-    if (dispositivoConectado) {
+    if (dispositivoConectado && (millis() - instanteConexionBLE >= 3000)) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%d", bpm);
         pCharBPM->setValue((uint8_t*)buffer, strlen(buffer));
@@ -170,7 +200,7 @@ void enviarLatidosBLE(int bpm) {
 }
 
 void enviarOxigenoBLE(int spo2) {
-    if (dispositivoConectado) {
+    if (dispositivoConectado && (millis() - instanteConexionBLE >= 3000)) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%d", spo2);
         pCharSpO2->setValue((uint8_t*)buffer, strlen(buffer));
@@ -179,7 +209,7 @@ void enviarOxigenoBLE(int spo2) {
 }
 
 void enviarBateriaBLE(int porcentaje) {
-    if (dispositivoConectado) {
+    if (dispositivoConectado && (millis() - instanteConexionBLE >= 3000)) {
         char buffer[10];
         snprintf(buffer, sizeof(buffer), "%d", porcentaje);
         pCharBat->setValue((uint8_t*)buffer, strlen(buffer));
