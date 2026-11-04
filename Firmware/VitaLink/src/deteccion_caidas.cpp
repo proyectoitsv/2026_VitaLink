@@ -8,8 +8,6 @@ static unsigned long tiempo_caida_libre = 0;
 static bool estado_alarma = false;
 
 void inicializarDetector() {
-  Serial.begin(115200);
-
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
 
@@ -28,7 +26,6 @@ void detectarCaidas() {
   // 1. MODO ALARMA ACTIVA (esperando reseteo del botón)
   if (estado_alarma) {
     if (digitalRead(PIN_BOTON) == HIGH) {
-      Serial.println("--- ALARMA RESETEADA POR EL USUARIO ---");
       estado_alarma = false;
       digitalWrite(PIN_LED, LOW);
       delay(500);
@@ -45,15 +42,6 @@ void detectarCaidas() {
   float z_g = a.acceleration.z / 9.81;
   float a_res = sqrt(pow(x_g, 2) + pow(y_g, 2) + pow(z_g, 2));
 
-  Serial.print("Eje_X:");
-  Serial.print(x_g);
-  Serial.print("\tEje_Y:");
-  Serial.print(y_g);
-  Serial.print("\tEje_Z:");
-  Serial.print(z_g);
-  Serial.print("\tResultante_G:");
-  Serial.println(a_res);
-
   // FASE 1: detección de caída libre
   if (a_res < UMBRAL_CAIDA_LIBRE) {
     posible_caida_libre = true;
@@ -63,7 +51,6 @@ void detectarCaidas() {
   // FASE 2: detección de impacto
   if (posible_caida_libre && (millis() - tiempo_caida_libre < VENTANA_TIEMPO)) {
     if (a_res > UMBRAL_IMPACTO) {
-      Serial.println("!!! IMPACTO CONFIRMADO - ALARMA ENCLAVADA !!!");
       estado_alarma = true;
       digitalWrite(PIN_LED, HIGH);
       posible_caida_libre = false;
