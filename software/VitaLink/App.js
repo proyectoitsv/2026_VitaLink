@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -15,8 +16,13 @@ import PatientOnboardingScreen from './screens/PatientOnboardingScreen';
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  useEffect(() => {
+    StatusBar.setHidden(true, 'none');
+  }, []);
+
   return (
     <NavigationContainer>
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
       <Stack.Navigator 
         initialRouteName="RoleSelection"
         screenOptions={{
@@ -24,6 +30,8 @@ export default function App() {
           headerTintColor: '#FFFFFF',
           headerTitleStyle: { fontWeight: 'bold' },
           headerShadowVisible: false,
+          statusBarHidden: true,
+          navigationBarHidden: true,
         }}
       >
         <Stack.Screen 

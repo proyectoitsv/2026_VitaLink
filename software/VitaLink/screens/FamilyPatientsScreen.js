@@ -76,15 +76,16 @@ export default function FamilyPatientsScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
 
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backBtn} 
           onPress={() => navigation.navigate('RoleSelection')}
+          activeOpacity={0.7}
         >
-          <MaterialCommunityIcons name="chevron-left" size={32} color="#FFF" />
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
@@ -103,12 +104,12 @@ export default function FamilyPatientsScreen({ navigation }) {
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#FF2D55" />
+          <ActivityIndicator size="large" color="#E04644" />
         </View>
       ) : patients.length === 0 ? (
         <Animatable.View animation="fadeInUp" style={styles.emptyContainer}>
           <View style={styles.emptyIconCircle}>
-            <MaterialCommunityIcons name="account-multiple-plus-outline" size={56} color="#FF2D55" />
+            <MaterialCommunityIcons name="account-multiple-plus-outline" size={52} color="#E04644" />
           </View>
           <Text style={styles.emptyTitle}>No hay pacientes vinculados</Text>
           <Text style={styles.emptySubtitle}>
@@ -139,9 +140,9 @@ export default function FamilyPatientsScreen({ navigation }) {
           <TouchableOpacity 
             style={styles.bottomAddCard} 
             onPress={() => navigation.navigate('FamilyLogin')}
-            activeOpacity={0.7}
+            activeOpacity={0.75}
           >
-            <MaterialCommunityIcons name="plus-circle-outline" size={22} color="#8E8E93" />
+            <MaterialCommunityIcons name="plus-circle-outline" size={22} color="#9CA3AF" />
             <Text style={styles.bottomAddCardText}>Vincular a otro paciente</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -150,7 +151,6 @@ export default function FamilyPatientsScreen({ navigation }) {
   );
 }
 
-// Subcomponent that listens to live vitals and profile for each individual patient card
 function PatientListItem({ item, db, onPress, onRemove }) {
   const patientId = item.patientId || item.id;
   const [patientData, setPatientData] = useState(null);
@@ -158,17 +158,14 @@ function PatientListItem({ item, db, onPress, onRemove }) {
   const [alerta, setAlerta] = useState(null);
 
   useEffect(() => {
-    // 1. Escuchar perfil del paciente (nombre, apellido, avatar, ficha)
     const unsubDoc = onSnapshot(doc(db, 'pacientes', patientId), (docSnap) => {
       if (docSnap.exists()) setPatientData(docSnap.data());
     });
 
-    // 2. Escuchar signos vitales live
     const unsubVitals = onSnapshot(doc(db, 'pacientes', patientId, 'signos_actuales', 'live'), (docSnap) => {
       if (docSnap.exists()) setVitals(docSnap.data());
     });
 
-    // 3. Escuchar alertas recientes
     const qAlertas = query(collection(db, 'pacientes', patientId, 'alertas_criticas'), orderBy('timestamp', 'desc'), limit(1));
     const unsubAlertas = onSnapshot(qAlertas, (snap) => {
       if (!snap.empty) {
@@ -183,10 +180,11 @@ function PatientListItem({ item, db, onPress, onRemove }) {
   const nombreCompleto = patientData 
     ? [patientData.nombre, patientData.apellido].filter(Boolean).join(' ')
     : (item.nombre || `Paciente ${patientId}`);
-  const avatar = patientData?.avatar || 'account-circle';
+  const avatar = patientData?.avatar || 'account';
   const vinculo = item.vinculo || 'Familiar';
   const edad = patientData?.edad;
   const tipoSangre = patientData?.tipoSangre;
+  const isOnline = vitals && vitals.bpm && vitals.bpm !== '--';
 
   return (
     <Animatable.View animation="fadeInUp" duration={400}>
@@ -197,31 +195,28 @@ function PatientListItem({ item, db, onPress, onRemove }) {
         activeOpacity={0.8}
       >
         {/* Left: Avatar */}
-        <View style={[styles.avatarCircle, alerta && { borderColor: '#FFF' }]}>
+        <View style={styles.avatarCircle}>
           {patientData?.foto ? (
             <Image source={{ uri: patientData.foto }} style={styles.avatarImg} />
           ) : (
-            <MaterialCommunityIcons name={avatar} size={36} color={alerta ? "#FFF" : "#FF2D55"} />
+            <MaterialCommunityIcons name={avatar} size={34} color="#374151" />
           )}
         </View>
 
         {/* Center: Info */}
         <View style={styles.cardInfo}>
+          <Text style={styles.vinculoLabel}>{vinculo.toUpperCase()}</Text>
           <View style={styles.nameRow}>
             <Text style={styles.patientName} numberOfLines={1}>{nombreCompleto}</Text>
+            <View style={[styles.onlineDot, { backgroundColor: isOnline ? '#43C667' : '#6B7280' }]} />
           </View>
           
-          <View style={styles.badgeRow}>
-            <View style={styles.vinculoBadge}>
-              <Text style={styles.vinculoBadgeText}>{vinculo.toUpperCase()}</Text>
+          {(edad || tipoSangre) ? (
+            <View style={styles.badgeRow}>
+              {edad ? <Text style={styles.metaText}>{edad} años</Text> : null}
+              {tipoSangre ? <Text style={styles.metaText}>{edad ? '• ' : ''}Grupo {tipoSangre}</Text> : null}
             </View>
-            {edad && (
-              <Text style={styles.metaText}>{edad} años</Text>
-            )}
-            {tipoSangre && (
-              <Text style={styles.metaText}>• {tipoSangre}</Text>
-            )}
-          </View>
+          ) : null}
         </View>
 
         {/* Right: Live Status Pill & Actions */}
@@ -231,16 +226,16 @@ function PatientListItem({ item, db, onPress, onRemove }) {
               <MaterialCommunityIcons name="alert-octagon" size={14} color="#FFF" style={{ marginRight: 4 }} />
               <Text style={styles.alertPillText}>CAÍDA</Text>
             </Animatable.View>
-          ) : vitals && vitals.bpm && vitals.bpm !== '--' ? (
+          ) : isOnline ? (
             <View style={styles.vitalsPill}>
               <Animatable.View animation="pulse" iterationCount="infinite" duration={1200}>
-                <MaterialCommunityIcons name="heart-pulse" size={16} color="#FF2D55" style={{ marginRight: 4 }} />
+                <MaterialCommunityIcons name="cards-heart" size={15} color="#E04644" style={{ marginRight: 5 }} />
               </Animatable.View>
               <Text style={styles.vitalsPillText}>{vitals.bpm} LPM</Text>
             </View>
           ) : (
             <View style={styles.waitingPill}>
-              <Text style={styles.waitingPillText}>STANDBY</Text>
+              <Text style={styles.waitingPillText}>EN ESPERA</Text>
             </View>
           )}
           
@@ -250,9 +245,9 @@ function PatientListItem({ item, db, onPress, onRemove }) {
               onPress={() => onRemove(nombreCompleto)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <MaterialCommunityIcons name="link-off" size={17} color="#8E8E93" />
+              <MaterialCommunityIcons name="link-off" size={16} color="#9CA3AF" />
             </TouchableOpacity>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="#555" />
+            <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
           </View>
         </View>
 
@@ -262,49 +257,49 @@ function PatientListItem({ item, db, onPress, onRemove }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505' },
+  container: { flex: 1, backgroundColor: '#0B0D10' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 55, paddingHorizontal: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 16 },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
   headerCenter: { alignItems: 'center' },
-  headerCategory: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 2 },
-  headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
-  addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FF2D55', justifyContent: 'center', alignItems: 'center', shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+  headerCategory: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 2 },
+  headerTitle: { color: '#FFFFFF', fontSize: 21, fontWeight: '700' },
+  addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E04644', justifyContent: 'center', alignItems: 'center' },
 
   // Empty State
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  emptyIconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,45,85,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: 'rgba(255,45,85,0.2)' },
-  emptyTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginBottom: 10, textAlign: 'center' },
-  emptySubtitle: { color: '#8E8E93', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  firstAddBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF2D55', paddingVertical: 16, paddingHorizontal: 28, borderRadius: 16, shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
-  firstAddBtnText: { color: '#FFF', fontSize: 15, fontWeight: '800' },
+  emptyIconCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center', marginBottom: 22 },
+  emptyTitle: { color: '#FFF', fontSize: 22, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  emptySubtitle: { color: '#9CA3AF', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 28 },
+  firstAddBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E04644', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 20 },
+  firstAddBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
   // List
-  listContent: { padding: 20, paddingBottom: 50 },
-  patientCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', borderRadius: 24, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  patientCardAlert: { backgroundColor: '#380B13', borderColor: '#FF2D55' },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  listContent: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 50 },
+  patientCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', borderRadius: 22, padding: 18, marginBottom: 14 },
+  patientCardAlert: { backgroundColor: '#3B1819', borderWidth: 1.5, borderColor: '#E04644' },
+  avatarCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
-  cardInfo: { flex: 1, marginLeft: 16, marginRight: 8 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  patientName: { color: '#FFF', fontSize: 18, fontWeight: '700' },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
-  vinculoBadge: { backgroundColor: 'rgba(255,45,85,0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginRight: 8 },
-  vinculoBadgeText: { color: '#FF2D55', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  metaText: { color: '#8E8E93', fontSize: 12, marginRight: 6 },
+  cardInfo: { flex: 1, marginLeft: 14, marginRight: 8 },
+  vinculoLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  patientName: { color: '#FFF', fontSize: 19, fontWeight: '700', flexShrink: 1 },
+  onlineDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 7, marginTop: 2 },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  metaText: { color: '#9CA3AF', fontSize: 12, fontWeight: '500', marginRight: 6 },
 
-  statusCol: { alignItems: 'flex-end', justifyContent: 'space-between', height: 48 },
-  vitalsPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,45,85,0.12)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,45,85,0.25)' },
-  vitalsPillText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
-  alertPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF2D55', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
-  alertPillText: { color: '#FFF', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
-  waitingPill: { backgroundColor: '#1E1E1E', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
-  waitingPillText: { color: '#777', fontSize: 11, fontWeight: '700' },
+  statusCol: { alignItems: 'flex-end', justifyContent: 'space-between', height: 50 },
+  vitalsPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  vitalsPillText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  alertPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E04644', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  alertPillText: { color: '#FFF', fontSize: 12, fontWeight: '800', letterSpacing: 0.4 },
+  waitingPill: { backgroundColor: '#181A1F', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10 },
+  waitingPillText: { color: '#9CA3AF', fontSize: 11, fontWeight: '600' },
   cardActionsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  cardUnlinkBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#1C1C1E', justifyContent: 'center', alignItems: 'center', marginRight: 6 },
+  cardUnlinkBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#181A1F', justifyContent: 'center', alignItems: 'center', marginRight: 6 },
 
-  bottomAddCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0D0D0D', borderRadius: 18, paddingVertical: 16, marginTop: 8, borderWidth: 1, borderColor: '#222', borderStyle: 'dashed' },
-  bottomAddCardText: { color: '#8E8E93', fontSize: 14, fontWeight: '600', marginLeft: 8 }
+  bottomAddCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', borderRadius: 20, paddingVertical: 16, marginTop: 4 },
+  bottomAddCardText: { color: '#E5E7EB', fontSize: 14, fontWeight: '600', marginLeft: 8 }
 });

@@ -33,7 +33,8 @@ export default function PatientScreen({ navigation }) {
   const [alertaCaida, setAlertaCaida] = useState('0');
   const [alertaSOS, setAlertaSOS] = useState('0');
 
-  // Estados OTA
+  // Estados OTA y Ajustes
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [firmwareVersion, setFirmwareVersion] = useState('--');
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showOtaModal, setShowOtaModal] = useState(false);
@@ -49,6 +50,7 @@ export default function PatientScreen({ navigation }) {
   const locationRef = useRef(null);
   const datosRef = useRef({ bpm: '--', spo2: '--', bateria: '--', alertaCaida: '0', alertaSOS: '0' });
   const isConnectedRef = useRef(false);
+  const isConnectingRef = useRef(false);
   const deviceRef = useRef(null);
   const pingIntervalRef = useRef(null);
   const lastKnownDeviceIdRef = useRef(null);
@@ -91,7 +93,7 @@ export default function PatientScreen({ navigation }) {
             }
             if (data.pulseraBleId) {
               lastKnownDeviceIdRef.current = data.pulseraBleId;
-              if (!isConnectedRef.current && !userExplicitlyDisconnectedRef.current) {
+              if (!isConnectedRef.current && !isConnectingRef.current && !userExplicitlyDisconnectedRef.current) {
                 checkAndAutoConnect();
               }
             }
@@ -174,8 +176,9 @@ export default function PatientScreen({ navigation }) {
   };
 
   const handleDisconnection = (allowAutoReconnect = false) => {
-    if (!isConnectedRef.current && !deviceRef.current) return;
+    if (!isConnectedRef.current && !isConnectingRef.current && !deviceRef.current) return;
     isConnectedRef.current = false;
+    isConnectingRef.current = false;
 
     // 1. Limpiar suscripciones activas
     if (subscriptionsRef.current) {
@@ -279,7 +282,7 @@ export default function PatientScreen({ navigation }) {
   }, [connected, device]);
 
   const checkAndAutoConnect = async () => {
-    if (isConnectedRef.current) return;
+    if (isConnectedRef.current || isConnectingRef.current) return;
     try {
       await requestPermissions();
 
@@ -315,7 +318,7 @@ export default function PatientScreen({ navigation }) {
   };
 
   const startScan = async (isUserInitiated = false) => {
-    if (isConnectedRef.current) return;
+    if (isConnectedRef.current || isConnectingRef.current) return;
     await requestPermissions();
     if (isUserInitiated) {
       userExplicitlyDisconnectedRef.current = false;
@@ -342,9 +345,9 @@ export default function PatientScreen({ navigation }) {
     scanTimeoutRef.current = setTimeout(() => {
       bleManager.stopDeviceScan();
       setIsScanning(false);
-      if (!isUserInitiated && !isConnectedRef.current && !userExplicitlyDisconnectedRef.current && lastKnownDeviceIdRef.current) {
+      if (!isUserInitiated && !isConnectedRef.current && !isConnectingRef.current && !userExplicitlyDisconnectedRef.current && lastKnownDeviceIdRef.current) {
         autoReconnectTimerRef.current = setTimeout(() => {
-          if (!isConnectedRef.current) checkAndAutoConnect();
+          if (!isConnectedRef.current && !isConnectingRef.current) checkAndAutoConnect();
         }, 8000);
       }
     }, isUserInitiated ? 15000 : 8000);
@@ -355,7 +358,7 @@ export default function PatientScreen({ navigation }) {
         setIsScanning(false);
         return;
       }
-      if (!scannedDevice) return;
+      if (!scannedDevice || isConnectedRef.current || isConnectingRef.current) return;
 
       const name = scannedDevice.name || scannedDevice.localName || '';
       const isVitaLinkName = name.toLowerCase().includes('vitalink');
@@ -378,28 +381,31 @@ export default function PatientScreen({ navigation }) {
     startScan(true);
   };
 
-  // Forzar limpieza de caché GATT en Android y redescubrir todas las características BLE
-  const refreshDeviceGattCache = async (targetDevice) => {
+  // Redescubrir todas las características BLE sin cortar el enlace físico innecesariamente
+  const refreshDeviceGattCache = async (targetDevice, forceReconnect = false) => {
     const devId = targetDevice?.id || lastKnownDeviceIdRef.current;
     if (!devId) return targetDevice;
     try {
-      await bleManager.cancelDeviceConnection(devId).catch(() => {});
+      let activeDev = targetDevice;
+      if (forceReconnect) {
+        await bleManager.cancelDeviceConnection(devId).catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 600));
+        activeDev = await bleManager.connectToDevice(devId, { refreshGatt: 'OnConnected' });
+        setDevice(activeDev);
+        deviceRef.current = activeDev;
+        activeDev.onDisconnected(() => {
+          if (!isUpdatingOtaRef.current) {
+            console.log('⚡ Pulsera desconectada físicamente');
+            handleDisconnection(true);
+          }
+        });
+      }
       await new Promise(resolve => setTimeout(resolve, 600));
-      const reconnected = await bleManager.connectToDevice(devId, { refreshGatt: 'OnConnected' });
-      setDevice(reconnected);
-      deviceRef.current = reconnected;
-      reconnected.onDisconnected(() => {
-        if (!isUpdatingOtaRef.current) {
-          console.log('⚡ Pulsera desconectada físicamente');
-          handleDisconnection(true);
-        }
-      });
-      await new Promise(resolve => setTimeout(resolve, 700));
-      await reconnected.discoverAllServicesAndCharacteristics();
+      await activeDev.discoverAllServicesAndCharacteristics();
       try {
-        await reconnected.requestMTU(512);
+        await activeDev.requestMTU(512);
       } catch (e) {}
-      return reconnected;
+      return activeDev;
     } catch (err) {
       console.warn('Error al refrescar caché GATT:', err.message);
       return targetDevice;
@@ -407,7 +413,13 @@ export default function PatientScreen({ navigation }) {
   };
 
   const connectToDevice = async (scannedDevice) => {
+    if (isConnectingRef.current || isConnectedRef.current) return;
+    isConnectingRef.current = true;
     setIsConnecting(true);
+    if (autoReconnectTimerRef.current) {
+      clearTimeout(autoReconnectTimerRef.current);
+      autoReconnectTimerRef.current = null;
+    }
     try {
       // Si el dispositivo ya está conectado al OS, usar la conexión o conectar limpiando caché GATT
       const isAlready = await scannedDevice.isConnected().catch(() => false);
@@ -433,7 +445,7 @@ export default function PatientScreen({ navigation }) {
         handleDisconnection(true);
       });
       
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 600));
       await activeDevice.discoverAllServicesAndCharacteristics();
 
       // Negociar MTU máximo para permitir bloques grandes en OTA
@@ -444,32 +456,33 @@ export default function PatientScreen({ navigation }) {
         console.warn('No se pudo negociar MTU 512:', mtuErr);
       }
 
-      // Leer la versión actual del firmware de la pulsera (si falla por caché GATT vieja de Android, refrescar GATT)
-      try {
-        const versionChar = await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
-        if (versionChar?.value) {
-          const decodedVer = decodeBase64(versionChar.value).trim();
-          if (decodedVer) {
-            setFirmwareVersion(decodedVer);
-          }
-        }
-      } catch (verErr) {
-        console.log('Refrescando caché GATT para descubrir características OTA...');
-        activeDevice = await refreshDeviceGattCache(activeDevice);
-        try {
-          const retryVerChar = await activeDevice.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
-          if (retryVerChar?.value) {
-            const decodedVer = decodeBase64(retryVerChar.value).trim();
-            if (decodedVer) {
-              setFirmwareVersion(decodedVer);
+      // Leer la versión actual del firmware con reintentos suaves sin desconectar el dispositivo
+      const tryReadFirmwareVersion = async (dev) => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            if (attempt > 0) {
+              await new Promise(resolve => setTimeout(resolve, 450));
+              await dev.discoverAllServicesAndCharacteristics();
             }
+            const versionChar = await dev.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
+            if (versionChar?.value) {
+              const decodedVer = decodeBase64(versionChar.value).trim();
+              if (decodedVer && decodedVer !== '--') {
+                setFirmwareVersion(decodedVer);
+                return true;
+              }
+            }
+          } catch (readErr) {
+            console.log(`Intento ${attempt + 1} de lectura de versión OTA:`, readErr.message);
           }
-        } catch (retryErr) {
-          console.log('Característica de versión OTA no disponible aún:', retryErr.message);
         }
-      }
+        return false;
+      };
+
+      await tryReadFirmwareVersion(activeDevice);
 
       isConnectedRef.current = true;
+      isConnectingRef.current = false;
       setConnected(true);
       setIsConnecting(false);
       setDisconnectNotice(false);
@@ -491,6 +504,17 @@ export default function PatientScreen({ navigation }) {
         });
         subscriptionsRef.current = [];
       }
+
+      const subVer = bleManager.monitorCharacteristicForDevice(activeDevice.id, VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID, (error, characteristic) => {
+        if (error) return;
+        if (characteristic?.value) {
+          const val = decodeBase64(characteristic.value).trim();
+          if (val && val !== '--') {
+            setFirmwareVersion(val);
+          }
+        }
+      });
+      subscriptionsRef.current.push(subVer);
 
       const subBpm = bleManager.monitorCharacteristicForDevice(activeDevice.id, VITALINK_SERVICE_UUID, BPM_CHAR_UUID, (error, characteristic) => {
         if (error) {
@@ -573,6 +597,7 @@ export default function PatientScreen({ navigation }) {
 
     } catch (e) {
       console.warn('Error connectToDevice:', e);
+      isConnectingRef.current = false;
       setIsConnecting(false);
       handleDisconnection(true);
     }
@@ -597,10 +622,16 @@ export default function PatientScreen({ navigation }) {
   };
 
   const checkFirmwareUpdate = async () => {
-    if (!connected || !deviceRef.current) return;
+    setShowSettingsModal(false);
     setOtaStatus('checking');
     setOtaMessage('Buscando actualizaciones en la nube...');
     setShowOtaModal(true);
+
+    if (!connected || !deviceRef.current) {
+      setOtaStatus('error');
+      setOtaMessage('Conectá tu pulsera VitaLink primero para buscar e instalar actualizaciones.');
+      return;
+    }
 
     try {
       // Refrescar lectura de versión por BLE antes de comparar
@@ -781,10 +812,10 @@ export default function PatientScreen({ navigation }) {
 
       // 6. Enviar bloques grandes usando ráfagas WriteWithoutResponse + sincronización periódica WithResponse
       setOtaStatus('transferring');
-      setOtaMessage('Transfiriendo actualización rápida por Bluetooth... No apagues la pulsera.');
+      setOtaMessage('Transfiriendo actualización rápida por Bluetooth...');
 
-      const CHUNK_SIZE = Math.min(480, Math.max(20, negotiatedMtu - 7));
-      const BURST_SYNC_EVERY = 12;
+      const CHUNK_SIZE = Math.min(490, Math.max(20, negotiatedMtu - 7));
+      const BURST_SYNC_EVERY = 24;
       let chunkIndex = 0;
       let lastReportedPct = -1;
 
@@ -900,23 +931,23 @@ export default function PatientScreen({ navigation }) {
   };
 
   const getStatusColor = () => {
-    if (connected) return '#34C759';
-    if (isConnecting || isScanning) return '#FF9500';
-    return '#FF453A';
+    if (connected) return '#43C667';
+    if (isConnecting || isScanning) return '#D4A359';
+    return '#E04644';
   };
 
   const heartbeatAnim = {
     0: { transform: [{ scale: 1 }] },
-    0.15: { transform: [{ scale: 1.25 }] },
+    0.15: { transform: [{ scale: 1.18 }] },
     0.3: { transform: [{ scale: 1 }] },
-    0.45: { transform: [{ scale: 1.15 }] },
+    0.45: { transform: [{ scale: 1.1 }] },
     1: { transform: [{ scale: 1 }] }
   };
 
   const breatheAnim = {
-    0: { transform: [{ scale: 1 }], opacity: 0.7 },
-    0.5: { transform: [{ scale: 1.15 }], opacity: 1 },
-    1: { transform: [{ scale: 1 }], opacity: 0.7 }
+    0: { transform: [{ scale: 1 }], opacity: 0.85 },
+    0.5: { transform: [{ scale: 1.08 }], opacity: 1 },
+    1: { transform: [{ scale: 1 }], opacity: 0.85 }
   };
 
   const getGreeting = () => {
@@ -927,9 +958,13 @@ export default function PatientScreen({ navigation }) {
   };
   const greeting = getGreeting();
 
+  const batNum = parseInt(bateria, 10);
+  const batValid = !isNaN(batNum) && batNum >= 0;
+  const batBars = !batValid ? 2 : batNum > 66 ? 3 : batNum > 25 ? 2 : 1;
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -940,7 +975,7 @@ export default function PatientScreen({ navigation }) {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons name="chevron-left" size={26} color="#FFFFFF" />
+            <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.avatarCircle} 
@@ -950,26 +985,25 @@ export default function PatientScreen({ navigation }) {
             {profile.foto ? (
               <Image source={{ uri: profile.foto }} style={styles.avatarImg} />
             ) : (
-              <MaterialCommunityIcons name={profile.avatar || 'account-circle'} size={34} color="#FF2D55" />
+              <MaterialCommunityIcons name={profile.avatar || 'account'} size={32} color="#374151" />
             )}
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <View style={styles.greetingRow}>
-              <MaterialCommunityIcons name={greeting.icon} size={14} color="#FF9500" style={{ marginRight: 5 }} />
-              <Text style={styles.headerSubtitle}>{greeting.text.toUpperCase()}</Text>
+            <Text style={styles.headerSubtitle}>{greeting.text.toUpperCase()}</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {profile.nombre ? profile.nombre.trim().split(' ')[0] : `Paciente`}
+              </Text>
+              <Animatable.View 
+                animation={isScanning || isConnecting ? 'flash' : undefined} 
+                iterationCount="infinite" 
+                style={[styles.statusDot, { backgroundColor: getStatusColor() }]} 
+              />
             </View>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {profile.nombre ? profile.nombre.trim().split(' ')[0] : `Paciente ${user ? user.uid.substring(0, 8) : '...'}`}
-            </Text>
           </View>
-          <Animatable.View 
-            animation={isScanning || isConnecting ? 'flash' : undefined} 
-            iterationCount="infinite" 
-            style={[styles.statusDot, { backgroundColor: getStatusColor() }]} 
-          />
         </View>
-        <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('Profile')}>
-          <MaterialCommunityIcons name="cog" size={24} color="#8E8E93" />
+        <TouchableOpacity style={styles.profileBtn} onPress={() => setShowSettingsModal(true)} activeOpacity={0.7}>
+          <MaterialCommunityIcons name="cog-outline" size={24} color="#D1D5DB" />
         </TouchableOpacity>
       </View>
 
@@ -980,11 +1014,11 @@ export default function PatientScreen({ navigation }) {
         {disconnectNotice && !connected && (
           <Animatable.View animation="bounceInDown" duration={500} style={styles.disconnectToast}>
             <View style={styles.disconnectToastLeft}>
-              <MaterialCommunityIcons name="bluetooth-off" size={20} color="#FF453A" />
+              <MaterialCommunityIcons name="bluetooth-off" size={20} color="#E04644" />
               <Text style={styles.disconnectToastText}>Pulsera desconectada o fuera de alcance</Text>
             </View>
             <TouchableOpacity onPress={() => setDisconnectNotice(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <MaterialCommunityIcons name="close" size={18} color="#8E8E93" />
+              <MaterialCommunityIcons name="close" size={18} color="#9CA3AF" />
             </TouchableOpacity>
           </Animatable.View>
         )}
@@ -1015,8 +1049,8 @@ export default function PatientScreen({ navigation }) {
               >
                 <MaterialCommunityIcons 
                   name={isScanning ? "radar" : isConnecting ? "bluetooth-transfer" : "watch-variant"} 
-                  size={58} 
-                  color="#FF2D55" 
+                  size={54} 
+                  color="#E04644" 
                 />
               </Animatable.View>
             </View>
@@ -1027,8 +1061,8 @@ export default function PatientScreen({ navigation }) {
             </Text>
             <Text style={styles.notConnectedSubtitle}>
               {isConnecting || isScanning 
-                ? 'Mantené la pulsera encendida y cerca de tu teléfono.' 
-                : 'Encendé tu pulsera VitaLink para visualizar tus signos vitales y mantener informada a tu familia.'}
+                ? 'Mantené la pulsera cerca de tu teléfono.' 
+                : 'Conectá tu pulsera VitaLink para visualizar tus signos vitales y mantener informada a tu familia.'}
             </Text>
 
             {/* Botón principal de conexión */}
@@ -1042,7 +1076,7 @@ export default function PatientScreen({ navigation }) {
                 {isScanning || isConnecting ? (
                   <ActivityIndicator color="#FFF" size="small" style={{ marginRight: 10 }} />
                 ) : (
-                  <MaterialCommunityIcons name="bluetooth-connect" size={24} color="#FFF" style={{ marginRight: 10 }} />
+                  <MaterialCommunityIcons name="bluetooth-connect" size={22} color="#FFF" style={{ marginRight: 10 }} />
                 )}
                 <Text style={styles.bigConnectBtnText}>
                   {isScanning ? 'BUSCANDO PULSERA...' : isConnecting ? 'SINCRONIZANDO...' : 'CONECTAR PULSERA'}
@@ -1052,56 +1086,62 @@ export default function PatientScreen({ navigation }) {
 
             {/* Consejo útil */}
             <View style={styles.hintCard}>
-              <MaterialCommunityIcons name="information-outline" size={18} color="#8E8E93" style={{ marginRight: 8 }} />
+              <MaterialCommunityIcons name="information-outline" size={18} color="#9CA3AF" style={{ marginRight: 8 }} />
               <Text style={styles.hintText}>
-                Verificá que el interruptor de la pulsera esté encendido y el Bluetooth activo.
+                Verificá que la pulsera tenga batería y que el Bluetooth de tu celular esté activo.
               </Text>
             </View>
 
           </Animatable.View>
         ) : (
-          /* VISTA 2: CUANDO LA PULSERA ESTÁ CONECTADA (DASHBOARD COMPLETO) */
-          <Animatable.View animation="fadeInUp" duration={600} style={{ flex: 1 }}>
+          /* VISTA 2: CUANDO LA PULSERA ESTÁ CONECTADA (DASHBOARD FIEL A LA REFERENCIA) */
+          <Animatable.View animation="fadeInUp" duration={500} style={{ flex: 1 }}>
             
-            {/* Barra de estado conectada */}
+            {/* Barra de estado conectada (2 píldoras grises oscuras) */}
             <View style={styles.connectedStatusBar}>
               <View style={styles.connectedBadge}>
                 <Animatable.View animation="pulse" iterationCount="infinite" duration={1400} style={styles.greenPulseDot} />
                 <Text style={styles.connectedBadgeText}>VITALINK EN LÍNEA</Text>
               </View>
               <TouchableOpacity style={styles.disconnectIconBtn} onPress={disconnectDevice} activeOpacity={0.7}>
-                <MaterialCommunityIcons name="bluetooth-off" size={16} color="#8E8E93" />
                 <Text style={styles.disconnectIconText}>Desconectar</Text>
               </TouchableOpacity>
             </View>
 
-            {/* BPM Hero Card */}
+            {/* BPM Hero Card (Frecuencia Cardíaca + Corazón + LPM + Onda ECG) */}
             <View style={styles.heroCard}>
-              <View style={styles.cardHeader}>
-                <Animatable.View animation="pulse" iterationCount="infinite" duration={1500}>
-                  <MaterialCommunityIcons name="heart-pulse" size={24} color="#FF2D55" />
-                </Animatable.View>
-                <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
-              </View>
+              <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
               
               <View style={styles.bpmContainer}>
-                <Animatable.View 
-                  animation={heartbeatAnim} 
-                  iterationCount="infinite" 
-                  duration={bpm !== '--' && bpm !== '0' && bpm !== '-1' ? Math.max(500, 60000 / parseInt(bpm)) : 1000}
-                  style={styles.heroIconWrapper}
-                >
-                  <MaterialCommunityIcons name="cards-heart" size={100} color="#FF2D55" />
-                </Animatable.View>
-                
-                <View style={styles.bpmTextWrapper}>
-                  <Text style={styles.bpmValue} adjustsFontSizeToFit numberOfLines={1}>
-                    {bpm === '0' ? '--' : bpm === '-1' ? '...' : bpm}
-                  </Text>
-                  <Text style={styles.bpmUnit}>
-                    {bpm === '0' ? 'SIN CONTACTO' : bpm === '-1' ? 'CALIBRANDO' : 'LPM'}
-                  </Text>
+                <View style={styles.bpmLeftGroup}>
+                  <Animatable.View 
+                    animation={heartbeatAnim} 
+                    iterationCount="infinite" 
+                    duration={bpm !== '--' && bpm !== '0' && bpm !== '-1' ? Math.max(500, 60000 / parseInt(bpm)) : 1000}
+                  >
+                    <MaterialCommunityIcons name="cards-heart" size={44} color="#E04644" />
+                  </Animatable.View>
+                  
+                  <View style={styles.bpmTextRow}>
+                    <Text style={styles.bpmValue} numberOfLines={1}>
+                      {bpm === '0' ? '--' : bpm === '-1' ? '...' : bpm}
+                    </Text>
+                    <Text style={styles.bpmUnit}>LPM</Text>
+                  </View>
                 </View>
+
+                <Animatable.View
+                  animation="pulse"
+                  iterationCount="infinite"
+                  duration={1800}
+                  style={styles.ecgContainer}
+                >
+                  <Image
+                    source={require('../assets/ecg_wave.png')}
+                    style={styles.ecgImage}
+                    resizeMode="contain"
+                  />
+                </Animatable.View>
               </View>
             </View>
 
@@ -1110,37 +1150,38 @@ export default function PatientScreen({ navigation }) {
               
               {/* SpO2 Card */}
               <View style={[styles.smallCard, { flex: 1, marginRight: 8 }]}>
-                <View style={styles.cardHeader}>
-                  <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500}>
-                    <MaterialCommunityIcons name="water" size={20} color="#32ADE6" />
-                  </Animatable.View>
-                  <Text style={styles.cardTitle}>Oxígeno</Text>
-                </View>
+                <Text style={styles.cardTitle}>Oxígeno</Text>
+
+                <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500} style={styles.smallCardIconWrap}>
+                  <MaterialCommunityIcons name="water" size={48} color="#3AB4F2" />
+                </Animatable.View>
+
                 <View style={styles.metricContainer}>
                   <Text style={styles.smallCardValue}>
                     {spo2 === '0' ? '--' : spo2 === '-1' ? '...' : spo2}
                   </Text>
-                  <Text style={styles.smallCardUnit}>%</Text>
+                  <Text style={styles.smallCardUnit}> %</Text>
                 </View>
-                <Animatable.View 
-                  animation={breatheAnim} 
-                  iterationCount="infinite" 
-                  duration={2500}
-                  style={styles.glowSpO2}
-                />
               </View>
 
               {/* Batería Card */}
               <View style={[styles.smallCard, { flex: 1, marginLeft: 8 }]}>
-                <View style={styles.cardHeader}>
-                  <Animatable.View animation="pulse" iterationCount="infinite" duration={3000}>
-                    <MaterialCommunityIcons name="battery-charging-60" size={20} color="#34C759" />
-                  </Animatable.View>
-                  <Text style={styles.cardTitle}>Batería</Text>
+                <Text style={styles.cardTitle}>Batería</Text>
+
+                <View style={styles.smallCardIconWrap}>
+                  <View style={styles.customBatteryWrap}>
+                    <View style={styles.customBatteryCap} />
+                    <View style={styles.customBatteryBody}>
+                      <View style={[styles.customBatteryBar, { opacity: batBars >= 3 ? 0.45 : 0.15 }]} />
+                      <View style={[styles.customBatteryBar, { opacity: batBars >= 2 ? 1 : 0.2 }]} />
+                      <View style={[styles.customBatteryBar, { opacity: batBars >= 1 ? 1 : 0.2, marginBottom: 0 }]} />
+                    </View>
+                  </View>
                 </View>
+
                 <View style={styles.metricContainer}>
                   <Text style={styles.smallCardValue}>{bateria}</Text>
-                  <Text style={styles.smallCardUnit}>%</Text>
+                  <Text style={styles.smallCardUnit}> %</Text>
                 </View>
               </View>
 
@@ -1157,11 +1198,43 @@ export default function PatientScreen({ navigation }) {
               </Animatable.View>
             )}
 
-            {/* Tarjeta de Firmware y Actualización OTA */}
-            <View style={styles.otaSectionCard}>
+          </Animatable.View>
+        )}
+
+      </View>
+
+      {/* Modal de Ajustes (contiene versión y actualización de pulsera + acceso al perfil) */}
+      <Modal statusBarTranslucent={true} navigationBarTranslucent={true}
+        visible={showSettingsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <View style={styles.otaModalOverlay}>
+          <Animatable.View animation="zoomIn" duration={300} style={styles.otaModalCard}>
+            <View style={styles.otaModalHeader}>
+              <View style={styles.otaModalIconCircle}>
+                <MaterialCommunityIcons name="cog-outline" size={26} color="#E04644" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.otaModalTitle}>Ajustes</Text>
+                <Text style={styles.otaModalSubtitle}>
+                  {connected ? `Pulsera conectada • v${firmwareVersion}` : 'Pulsera desconectada'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowSettingsModal(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <MaterialCommunityIcons name="close" size={22} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Tarjeta de Firmware y Actualización OTA dentro de Ajustes */}
+            <View style={[styles.otaSectionCard, { marginBottom: 14, marginTop: 0 }]}>
               <View style={styles.otaVersionRow}>
                 <View style={styles.otaVersionBadge}>
-                  <MaterialCommunityIcons name="chip" size={18} color="#FF2D55" style={{ marginRight: 8 }} />
+                  <MaterialCommunityIcons name="chip" size={18} color="#E04644" style={{ marginRight: 8 }} />
                   <Text style={styles.otaVersionText}>
                     Versión de pulsera: <Text style={styles.otaVersionHighlight}>v{firmwareVersion}</Text>
                   </Text>
@@ -1179,13 +1252,27 @@ export default function PatientScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* Botón para ir a Editar Perfil / Ficha Médica */}
+            <TouchableOpacity
+              style={styles.settingsProfileBtn}
+              onPress={() => {
+                setShowSettingsModal(false);
+                navigation.navigate('Profile');
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons name="account-edit-outline" size={20} color="#FFFFFF" style={{ marginRight: 10 }} />
+                <Text style={styles.otaCheckBtnText}>Mi Perfil y Ficha Médica</Text>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           </Animatable.View>
-        )}
-
-      </View>
+        </View>
+      </Modal>
 
       {/* Modal Animado de Actualización OTA */}
-      <Modal
+      <Modal statusBarTranslucent={true} navigationBarTranslucent={true}
         visible={showOtaModal}
         transparent
         animationType="fade"
@@ -1210,8 +1297,8 @@ export default function PatientScreen({ navigation }) {
                   }
                   size={28}
                   color={
-                    otaStatus === 'completed' || otaStatus === 'up_to_date' ? '#34C759' :
-                    otaStatus === 'error' ? '#FF453A' : '#FF2D55'
+                    otaStatus === 'completed' || otaStatus === 'up_to_date' ? '#43C667' :
+                    otaStatus === 'error' ? '#E04644' : '#E04644'
                   }
                 />
               </View>
@@ -1233,7 +1320,7 @@ export default function PatientScreen({ navigation }) {
                   onPress={() => setShowOtaModal(false)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <MaterialCommunityIcons name="close" size={22} color="#8E8E93" />
+                  <MaterialCommunityIcons name="close" size={22} color="#9CA3AF" />
                 </TouchableOpacity>
               )}
             </View>
@@ -1241,7 +1328,7 @@ export default function PatientScreen({ navigation }) {
             {/* Estado: Buscando en Firebase */}
             {otaStatus === 'checking' && (
               <View style={styles.otaStateCenter}>
-                <ActivityIndicator size="large" color="#FF2D55" style={{ marginBottom: 14 }} />
+                <ActivityIndicator size="large" color="#E04644" style={{ marginBottom: 14 }} />
                 <Text style={styles.otaMessageText}>{otaMessage}</Text>
               </View>
             )}
@@ -1303,9 +1390,9 @@ export default function PatientScreen({ navigation }) {
             {otaStatus === 'completed' && (
               <Animatable.View animation="bounceIn" style={styles.otaStateCenter}>
                 <View style={styles.otaProgressBarBg}>
-                  <View style={[styles.otaProgressBarFill, { width: '100%', backgroundColor: '#34C759' }]} />
+                  <View style={[styles.otaProgressBarFill, { width: '100%', backgroundColor: '#43C667' }]} />
                 </View>
-                <Text style={[styles.otaMessageText, { color: '#34C759', fontWeight: '700', marginTop: 14 }]}>
+                <Text style={[styles.otaMessageText, { color: '#43C667', fontWeight: '700', marginTop: 14 }]}>
                   {otaMessage}
                 </Text>
               </Animatable.View>
@@ -1314,7 +1401,7 @@ export default function PatientScreen({ navigation }) {
             {/* Estado: Error */}
             {otaStatus === 'error' && (
               <View style={styles.otaStateCenter}>
-                <Text style={[styles.otaMessageText, { color: '#FF453A' }]}>{otaMessage}</Text>
+                <Text style={[styles.otaMessageText, { color: '#E04644' }]}>{otaMessage}</Text>
                 <View style={styles.otaErrorActions}>
                   <TouchableOpacity
                     style={[styles.otaSecondaryBtn, { flex: 1, marginRight: 8 }]}
@@ -1342,110 +1429,122 @@ export default function PatientScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505' },
+  container: { flex: 1, backgroundColor: '#0B0D10' },
   
   // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 42, paddingBottom: 18 },
   headerContent: { flexDirection: 'row', flex: 1, alignItems: 'center' },
-  backCircleBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginRight: 10 },
-  avatarCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#161616', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  backCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
-  greetingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  headerSubtitle: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5 },
-  headerTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', letterSpacing: 0.3 },
-  statusDot: { width: 10, height: 10, borderRadius: 5, marginLeft: 8 },
-  profileBtn: { marginLeft: 10, width: 42, height: 42, borderRadius: 21, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  headerSubtitle: { color: '#D4A359', fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', letterSpacing: 0.2, flexShrink: 1 },
+  statusDot: { width: 9, height: 9, borderRadius: 4.5, marginLeft: 8, marginTop: 2 },
+  profileBtn: { marginLeft: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
 
   // Content
   content: { flex: 1, paddingHorizontal: 20 },
 
   // Toast de desconexión
-  disconnectToast: { backgroundColor: '#1C1517', borderWidth: 1, borderColor: 'rgba(255, 69, 58, 0.4)', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  disconnectToast: { backgroundColor: '#22252A', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   disconnectToastLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  disconnectToastText: { color: '#FF453A', fontSize: 13, fontWeight: '600', marginLeft: 10 },
+  disconnectToastText: { color: '#E04644', fontSize: 13, fontWeight: '600', marginLeft: 10 },
 
-  // Vista No Conectada (Hero Onboarding)
+  // Vista No Conectada
   notConnectedWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingBottom: 40 },
-  radarContainer: { width: 200, height: 200, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  radarRingOuter: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: 'rgba(255, 45, 85, 0.05)', borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.15)' },
-  radarRingInner: { position: 'absolute', width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255, 45, 85, 0.08)', borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.25)' },
-  radarCore: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#141414', borderWidth: 2, borderColor: '#FF2D55', justifyContent: 'center', alignItems: 'center', shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 18 },
-  radarCoreScanning: { borderColor: '#FF9500' },
-  notConnectedTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3, marginBottom: 8 },
-  notConnectedSubtitle: { color: '#8E8E93', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
-  bigConnectBtn: { backgroundColor: '#FF2D55', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 18, borderRadius: 24, shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16 },
-  bigConnectBtnActive: { backgroundColor: '#FF9500' },
-  bigConnectBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.8 },
-  hintCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, marginTop: 24, marginHorizontal: 10 },
-  hintText: { color: '#8E8E93', fontSize: 12, fontWeight: '500', flex: 1 },
+  radarContainer: { width: 190, height: 190, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  radarRingOuter: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(224, 70, 68, 0.06)', borderWidth: 1, borderColor: 'rgba(224, 70, 68, 0.16)' },
+  radarRingInner: { position: 'absolute', width: 134, height: 134, borderRadius: 67, backgroundColor: 'rgba(224, 70, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(224, 70, 68, 0.24)' },
+  radarCore: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#22252A', borderWidth: 2, borderColor: '#E04644', justifyContent: 'center', alignItems: 'center' },
+  radarCoreScanning: { borderColor: '#D4A359' },
+  notConnectedTitle: { color: '#FFFFFF', fontSize: 23, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
+  notConnectedSubtitle: { color: '#9CA3AF', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
+  bigConnectBtn: { backgroundColor: '#E04644', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 17, borderRadius: 22 },
+  bigConnectBtnActive: { backgroundColor: '#D4A359' },
+  bigConnectBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.6 },
+  hintCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, marginTop: 22, marginHorizontal: 6 },
+  hintText: { color: '#9CA3AF', fontSize: 12, fontWeight: '500', flex: 1 },
 
-  // Barra de estado conectado
+  // Barra de estado conectado (2 píldoras como en la imagen)
   connectedStatusBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  connectedBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(52, 199, 89, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(52, 199, 89, 0.3)' },
-  greenPulseDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#34C759', marginRight: 6 },
-  connectedBadgeText: { color: '#34C759', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  disconnectIconBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  disconnectIconText: { color: '#8E8E93', fontSize: 12, fontWeight: '600', marginLeft: 6 },
+  connectedBadge: { flex: 1.45, marginRight: 10, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', paddingHorizontal: 14, borderRadius: 21 },
+  greenPulseDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#43C667', marginRight: 8 },
+  connectedBadgeText: { color: '#43C667', fontSize: 13, fontWeight: '700', letterSpacing: 0.4 },
+  disconnectIconBtn: { flex: 1, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', paddingHorizontal: 14, borderRadius: 21 },
+  disconnectIconText: { color: '#E5E7EB', fontSize: 14, fontWeight: '600' },
 
-  // Cards Base
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  cardTitle: { color: '#8E8E93', fontSize: 15, fontWeight: '600', marginLeft: 8, letterSpacing: 0.5 },
+  // Títulos de tarjetas
+  cardTitle: { color: '#E8EAED', fontSize: 18, fontWeight: '600', letterSpacing: 0.1 },
   
-  // Hero Card (BPM)
-  heroCard: { backgroundColor: '#121212', borderRadius: 32, padding: 24, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.5, shadowRadius: 20 },
+  // Hero Card (Frecuencia Cardíaca)
+  heroCard: { backgroundColor: '#22252A', borderRadius: 22, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, marginBottom: 16 },
   bpmContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-  heroIconWrapper: { shadowColor: '#FF2D55', shadowOffset: {width: 0, height: 0}, shadowOpacity: 0.4, shadowRadius: 30 },
-  bpmTextWrapper: { alignItems: 'flex-end', flex: 1 },
-  bpmValue: { color: '#FFFFFF', fontSize: 110, fontWeight: '200', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -4, textAlign: 'right' },
-  bpmUnit: { color: '#FF2D55', fontSize: 18, fontWeight: '800', letterSpacing: 1, marginTop: -5 },
+  bpmLeftGroup: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
+  bpmTextRow: { flexDirection: 'row', alignItems: 'baseline', marginLeft: 12 },
+  bpmValue: { color: '#FFFFFF', fontSize: 34, fontWeight: '600', fontVariant: ['tabular-nums'], includeFontPadding: false },
+  bpmUnit: { color: '#E8EAED', fontSize: 22, fontWeight: '500', marginLeft: 8 },
+  ecgContainer: { flex: 1, alignItems: 'flex-end', justifyContent: 'center', marginLeft: 10 },
+  ecgImage: { width: 155, height: 78 },
 
-  // Row Cards
+  // Row Cards (Oxígeno y Batería)
   rowCards: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  smallCard: { backgroundColor: '#121212', borderRadius: 28, padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
-  metricContainer: { flexDirection: 'row', alignItems: 'baseline', marginTop: 8 },
-  smallCardValue: { color: '#FFFFFF', fontSize: 50, fontWeight: '300', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -1 },
-  smallCardUnit: { color: '#8E8E93', fontSize: 18, fontWeight: '600', marginLeft: 4 },
-  glowSpO2: { position: 'absolute', bottom: -20, right: -20, width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(50, 173, 230, 0.15)', blurRadius: 20 },
+  smallCard: { backgroundColor: '#22252A', borderRadius: 22, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, minHeight: 175, justifyContent: 'space-between' },
+  smallCardIconWrap: { alignSelf: 'flex-start', marginVertical: 12 },
+  metricContainer: { flexDirection: 'row', alignItems: 'baseline' },
+  smallCardValue: { color: '#FFFFFF', fontSize: 34, fontWeight: '600', fontVariant: ['tabular-nums'], includeFontPadding: false },
+  smallCardUnit: { color: '#FFFFFF', fontSize: 30, fontWeight: '500' },
+
+  // Ícono de batería personalizado igual a la referencia
+  customBatteryWrap: { alignItems: 'center', marginLeft: 4 },
+  customBatteryCap: { width: 12, height: 4, backgroundColor: '#43C667', borderTopLeftRadius: 2, borderTopRightRadius: 2, marginBottom: 1 },
+  customBatteryBody: { width: 26, height: 42, borderRadius: 4, borderWidth: 2.5, borderColor: '#43C667', padding: 3, justifyContent: 'space-between' },
+  customBatteryBar: { width: '100%', height: 9, backgroundColor: '#43C667', borderRadius: 1.5, marginBottom: 2 },
 
   // Alerta Crítica
-  alertCard: { backgroundColor: '#FF2D55', flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 24, shadowColor: '#FF2D55', shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.4, shadowRadius: 15, marginTop: 8, marginBottom: 12 },
-  alertTextGroup: { marginLeft: 16 },
-  alertTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
-  alertDesc: { color: 'rgba(255,255,255,0.8)', fontSize: 14, fontWeight: '500', marginTop: 2 },
+  alertCard: { backgroundColor: '#E04644', flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 22, marginTop: 4, marginBottom: 12 },
+  alertTextGroup: { marginLeft: 16, flex: 1 },
+  alertTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '800', letterSpacing: 0.4 },
+  alertDesc: { color: 'rgba(255,255,255,0.88)', fontSize: 13, fontWeight: '500', marginTop: 2 },
 
-  // Sección OTA en Dashboard
-  otaSectionCard: { backgroundColor: '#121212', borderRadius: 24, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginTop: 4 },
+  // Sección OTA en Ajustes
+  otaSectionCard: { backgroundColor: '#191C20', borderRadius: 18, padding: 16, marginTop: 4 },
   otaVersionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   otaVersionBadge: { flexDirection: 'row', alignItems: 'center' },
-  otaVersionText: { color: '#8E8E93', fontSize: 13, fontWeight: '600' },
+  otaVersionText: { color: '#9CA3AF', fontSize: 13, fontWeight: '600' },
   otaVersionHighlight: { color: '#FFFFFF', fontWeight: '800' },
-  otaCheckBtn: { backgroundColor: '#1C1C1E', borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.35)', borderRadius: 16, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  otaCheckBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  otaCheckBtn: { backgroundColor: '#2A2E35', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  otaCheckBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  settingsProfileBtn: { backgroundColor: '#191C20', borderRadius: 16, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
-  // Modal OTA
+  // Modal OTA & Ajustes
   otaModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.78)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  otaModalCard: { width: '100%', backgroundColor: '#141416', borderRadius: 28, padding: 24, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.6, shadowRadius: 24 },
-  otaModalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  otaModalIconCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255, 45, 85, 0.12)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255, 45, 85, 0.25)' },
-  otaModalTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: 0.2 },
-  otaModalSubtitle: { color: '#8E8E93', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  otaModalCard: { width: '100%', backgroundColor: '#22252A', borderRadius: 24, padding: 22 },
+  otaModalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  otaModalIconCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#191C20', justifyContent: 'center', alignItems: 'center' },
+  otaModalTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
+  otaModalSubtitle: { color: '#9CA3AF', fontSize: 12, fontWeight: '500', marginTop: 2 },
   otaStateCenter: { alignItems: 'center', paddingVertical: 12 },
-  otaMessageText: { color: '#D1D1D6', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
-  otaReleaseBox: { backgroundColor: '#1C1C1E', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 18 },
+  otaMessageText: { color: '#D1D5DB', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
+  otaReleaseBox: { backgroundColor: '#191C20', borderRadius: 16, padding: 16, marginBottom: 18 },
   otaReleaseHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  otaReleaseTag: { color: '#FF2D55', fontSize: 12, fontWeight: '800', letterSpacing: 0.8 },
+  otaReleaseTag: { color: '#E04644', fontSize: 12, fontWeight: '800', letterSpacing: 0.6 },
   otaReleaseNotesTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  otaReleaseNotesText: { color: '#AEAEB2', fontSize: 13, lineHeight: 19 },
-  otaPrimaryBtn: { backgroundColor: '#FF2D55', borderRadius: 18, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, marginTop: 4 },
-  otaPrimaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800', letterSpacing: 0.4 },
-  otaSecondaryBtn: { backgroundColor: '#242426', borderRadius: 16, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16, alignItems: 'center', justifyContent: 'center' },
-  otaSecondaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  otaReleaseNotesText: { color: '#9CA3AF', fontSize: 13, lineHeight: 19 },
+  otaPrimaryBtn: { backgroundColor: '#E04644', borderRadius: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  otaPrimaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  otaSecondaryBtn: { backgroundColor: '#2A2E35', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16, alignItems: 'center', justifyContent: 'center' },
+  otaSecondaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   otaProgressWrapper: { paddingVertical: 8 },
   otaProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   otaProgressLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  otaProgressPercent: { color: '#FF2D55', fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  otaProgressBarBg: { width: '100%', height: 12, backgroundColor: '#242426', borderRadius: 6, overflow: 'hidden', marginBottom: 14 },
-  otaProgressBarFill: { height: '100%', backgroundColor: '#FF2D55', borderRadius: 6 },
+  otaProgressPercent: { color: '#E04644', fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  otaProgressBarBg: { width: '100%', height: 10, backgroundColor: '#191C20', borderRadius: 5, overflow: 'hidden', marginBottom: 14 },
+  otaProgressBarFill: { height: '100%', backgroundColor: '#E04644', borderRadius: 5 },
   otaErrorActions: { flexDirection: 'row', width: '100%', marginTop: 16, alignItems: 'center' },
 });
+
+
+
+
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { getAuth } from '@react-native-firebase/auth';
@@ -15,7 +15,6 @@ export default function RoleSelectionScreen({ navigation }) {
       const auth = getAuth();
       const user = auth.currentUser;
       if (!user) {
-        // No hay sesión anónima previa: es nuevo paciente
         setCheckingPatient(false);
         navigation.navigate('PatientOnboarding');
         return;
@@ -42,49 +41,61 @@ export default function RoleSelectionScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
+
+      {/* Encabezado */}
       <View style={styles.header}>
-        <Animatable.View animation="pulse" easing="ease-out" iterationCount="infinite">
-          <MaterialCommunityIcons name="heart-pulse" size={75} color="#E53935" />
-        </Animatable.View>
+        <View style={styles.logoCircle}>
+          <Animatable.View animation="pulse" easing="ease-out" iterationCount="infinite" duration={1800}>
+            <MaterialCommunityIcons name="heart-pulse" size={52} color="#E04644" />
+          </Animatable.View>
+        </View>
         <Text style={styles.title}>VitaLink</Text>
         <Text style={styles.subtitle}>Elegí cómo vas a usar la aplicación hoy</Text>
       </View>
 
+      {/* Botones de selección de rol (ubicados más arriba y limpios) */}
       <View style={styles.buttonContainer}>
-        <Animatable.View animation="fadeInUp" duration={450} delay={100}>
-          <TouchableOpacity 
-            style={styles.cardButton} 
-            activeOpacity={0.7}
+        <Animatable.View animation="fadeInUp" duration={450} delay={80}>
+          <TouchableOpacity
+            style={[styles.cardButton, styles.patientCardBorder]}
+            activeOpacity={0.78}
             onPress={handlePatientPress}
             disabled={checkingPatient}
           >
-            <View style={[styles.iconCircle, {backgroundColor: '#2A1A1A'}]}>
-              <MaterialCommunityIcons name="watch-variant" size={32} color="#E53935" />
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(224, 70, 68, 0.16)' }]}>
+              <MaterialCommunityIcons name="watch-variant" size={30} color="#E04644" />
             </View>
             <View style={styles.cardText}>
               <Text style={styles.cardTitle}>Soy Paciente</Text>
               <Text style={styles.cardDesc}>Tengo la pulsera y quiero emitir mis signos vitales.</Text>
             </View>
-            <MaterialCommunityIcons name="chevron-right" size={24} color="#555" />
+            <View style={[styles.arrowBadge, { backgroundColor: '#E04644' }]}>
+              {checkingPatient ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <MaterialCommunityIcons name="chevron-right" size={24} color="#FFFFFF" />
+              )}
+            </View>
           </TouchableOpacity>
         </Animatable.View>
 
-        <Animatable.View animation="fadeInUp" duration={450} delay={250}>
-          <TouchableOpacity 
-            style={styles.cardButton} 
-            activeOpacity={0.7}
+        <Animatable.View animation="fadeInUp" duration={450} delay={180}>
+          <TouchableOpacity
+            style={[styles.cardButton, styles.familyCardBorder]}
+            activeOpacity={0.78}
             onPress={() => navigation.navigate('FamilyPatients')}
           >
-            <View style={[styles.iconCircle, {backgroundColor: '#1A2A2A'}]}>
-              <MaterialCommunityIcons name="account-supervisor" size={32} color="#43A047" />
+            <View style={[styles.iconCircle, { backgroundColor: 'rgba(67, 198, 103, 0.16)' }]}>
+              <MaterialCommunityIcons name="account-supervisor" size={30} color="#43C667" />
             </View>
             <View style={styles.cardText}>
               <Text style={styles.cardTitle}>Soy Familiar</Text>
               <Text style={styles.cardDesc}>Quiero monitorear a mi ser querido a distancia.</Text>
             </View>
-            <MaterialCommunityIcons name="chevron-right" size={24} color="#555" />
+            <View style={[styles.arrowBadge, { backgroundColor: '#43C667' }]}>
+              <MaterialCommunityIcons name="chevron-right" size={24} color="#FFFFFF" />
+            </View>
           </TouchableOpacity>
         </Animatable.View>
       </View>
@@ -93,14 +104,86 @@ export default function RoleSelectionScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212' },
-  header: { alignItems: 'center', marginTop: 100, marginBottom: 60, paddingHorizontal: 20 },
-  title: { fontSize: 38, fontWeight: '900', color: '#FFFFFF', marginTop: 15, letterSpacing: 1 },
-  subtitle: { fontSize: 16, color: '#AAAAAA', textAlign: 'center', marginTop: 10, lineHeight: 22 },
-  buttonContainer: { paddingHorizontal: 24, gap: 20 },
-  cardButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E1E1E', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#333' },
-  iconCircle: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
-  cardText: { flex: 1 },
-  cardTitle: { fontSize: 19, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 4 },
-  cardDesc: { fontSize: 14, color: '#888888', lineHeight: 20 }
+  container: {
+    flex: 1,
+    backgroundColor: '#0B0D10',
+    paddingTop: 58,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 36,
+    paddingHorizontal: 24,
+  },
+  logoCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#22252A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  buttonContainer: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  cardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#22252A',
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    borderWidth: 1.5,
+  },
+  patientCardBorder: {
+    borderColor: 'rgba(224, 70, 68, 0.35)',
+  },
+  familyCardBorder: {
+    borderColor: 'rgba(67, 198, 103, 0.35)',
+  },
+  iconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  cardText: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  cardDesc: {
+    fontSize: 13.5,
+    color: '#9CA3AF',
+    lineHeight: 19,
+    fontWeight: '500',
+  },
+  arrowBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

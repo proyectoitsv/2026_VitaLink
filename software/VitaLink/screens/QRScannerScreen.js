@@ -11,7 +11,6 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useIsFocused } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Animatable from 'react-native-animatable';
 
 const { width } = Dimensions.get('window');
 const CARD_SIZE = Math.min(width - 64, 280);
@@ -26,7 +25,7 @@ export default function QRScannerScreen({ navigation }) {
   if (!permission) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator color="#FF2D55" size="large" />
+        <ActivityIndicator color="#E04644" size="large" />
       </View>
     );
   }
@@ -34,9 +33,9 @@ export default function QRScannerScreen({ navigation }) {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#050505" />
+        <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
         <View style={styles.permissionCard}>
-          <MaterialCommunityIcons name="camera-off" size={48} color="#FF2D55" style={{ marginBottom: 16 }} />
+          <MaterialCommunityIcons name="camera-off" size={48} color="#E04644" style={{ marginBottom: 16 }} />
           <Text style={styles.permTitle}>Permiso de Cámara</Text>
           <Text style={styles.permSub}>
             VitaLink necesita acceso a la cámara para escanear el código QR que aparece en la pantalla del paciente.
@@ -71,7 +70,7 @@ export default function QRScannerScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
 
       {/* Top Header */}
       <View style={styles.header}>
@@ -80,13 +79,13 @@ export default function QRScannerScreen({ navigation }) {
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <MaterialCommunityIcons name="chevron-left" size={32} color="#FFFFFF" />
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerCategory}>VINCULACIÓN</Text>
           <Text style={styles.headerTitle}>Escanear Paciente</Text>
         </View>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Center Camera Card */}
@@ -101,7 +100,6 @@ export default function QRScannerScreen({ navigation }) {
             }}
             onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
           >
-            {/* Precision Corners inside the viewfinder */}
             <View style={[styles.corner, styles.cornerTL]} pointerEvents="none" />
             <View style={[styles.corner, styles.cornerTR]} pointerEvents="none" />
             <View style={[styles.corner, styles.cornerBL]} pointerEvents="none" />
@@ -109,7 +107,7 @@ export default function QRScannerScreen({ navigation }) {
 
             {scanned && (
               <View style={styles.scannedSuccess}>
-                <MaterialCommunityIcons name="check-circle" size={48} color="#34C759" />
+                <MaterialCommunityIcons name="check-circle" size={48} color="#43C667" />
                 <Text style={styles.scannedSuccessText}>VINCULANDO...</Text>
               </View>
             )}
@@ -125,7 +123,7 @@ export default function QRScannerScreen({ navigation }) {
           <MaterialCommunityIcons 
             name={torch ? "flashlight" : "flashlight-off"} 
             size={18} 
-            color={torch ? "#FFD60A" : "#8E8E93"} 
+            color={torch ? "#D4A359" : "#9CA3AF"} 
           />
           <Text style={[styles.torchPillText, torch && styles.torchPillTextActive]}>
             {torch ? "Linterna Encendida" : "Linterna"}
@@ -153,14 +151,14 @@ export default function QRScannerScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505', justifyContent: 'space-between' },
+  container: { flex: 1, backgroundColor: '#0B0D10', justifyContent: 'space-between' },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 55, paddingHorizontal: 20, paddingBottom: 15 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 15 },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
   headerCenter: { alignItems: 'center' },
-  headerCategory: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 2 },
-  headerTitle: { color: '#FFFFFF', fontSize: 19, fontWeight: '700' },
+  headerCategory: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 2 },
+  headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
 
   // Center Section
   centerSection: { alignItems: 'center', justifyContent: 'center' },
@@ -169,39 +167,39 @@ const styles = StyleSheet.create({
     height: CARD_SIZE, 
     borderRadius: 24, 
     overflow: 'hidden', 
-    borderWidth: 2, 
-    borderColor: '#333333',
+    backgroundColor: '#22252A',
+    padding: 4,
     position: 'relative'
   },
-  camera: { flex: 1 },
-  scannedSuccess: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,5,5,0.85)', justifyContent: 'center', alignItems: 'center' },
-  scannedSuccessText: { color: '#34C759', fontSize: 13, fontWeight: '800', letterSpacing: 1, marginTop: 10 },
+  camera: { flex: 1, borderRadius: 20, overflow: 'hidden' },
+  scannedSuccess: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(11,13,16,0.88)', justifyContent: 'center', alignItems: 'center' },
+  scannedSuccessText: { color: '#43C667', fontSize: 13, fontWeight: '700', letterSpacing: 0.8, marginTop: 10 },
 
   // Precision Corners
-  corner: { position: 'absolute', width: 24, height: 24, borderColor: '#FF2D55', borderWidth: 3.5 },
-  cornerTL: { top: 12, left: 12, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 10 },
-  cornerTR: { top: 12, right: 12, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 10 },
-  cornerBL: { bottom: 12, left: 12, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 10 },
-  cornerBR: { bottom: 12, right: 12, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 10 },
+  corner: { position: 'absolute', width: 24, height: 24, borderColor: '#E04644', borderWidth: 3.5 },
+  cornerTL: { top: 14, left: 14, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 10 },
+  cornerTR: { top: 14, right: 14, borderLeftWidth: 0, borderBottomWidth: 0, borderTopRightRadius: 10 },
+  cornerBL: { bottom: 14, left: 14, borderRightWidth: 0, borderTopWidth: 0, borderBottomLeftRadius: 10 },
+  cornerBR: { bottom: 14, right: 14, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 10 },
 
   // Torch Toggle Pill
-  torchPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#161616', paddingVertical: 10, paddingHorizontal: 18, borderRadius: 20, marginTop: 20, borderWidth: 1, borderColor: '#262626' },
-  torchPillActive: { backgroundColor: 'rgba(255, 214, 10, 0.15)', borderColor: '#FFD60A' },
-  torchPillText: { color: '#8E8E93', fontSize: 13, fontWeight: '600', marginLeft: 8 },
-  torchPillTextActive: { color: '#FFD60A' },
+  torchPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', paddingVertical: 11, paddingHorizontal: 20, borderRadius: 22, marginTop: 20 },
+  torchPillActive: { backgroundColor: '#2A251B' },
+  torchPillText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600', marginLeft: 8 },
+  torchPillTextActive: { color: '#D4A359' },
 
   // Footer
-  footer: { paddingHorizontal: 30, paddingBottom: 45, alignItems: 'center' },
-  footerInstruction: { color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  manualBtn: { paddingVertical: 10 },
-  manualBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+  footer: { paddingHorizontal: 30, paddingBottom: 42, alignItems: 'center' },
+  footerInstruction: { color: '#9CA3AF', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 18 },
+  manualBtn: { backgroundColor: '#22252A', paddingVertical: 12, paddingHorizontal: 22, borderRadius: 20 },
+  manualBtnText: { color: '#E5E7EB', fontSize: 14, fontWeight: '600' },
 
   // Permission UI
-  permissionCard: { padding: 32, alignItems: 'center', backgroundColor: '#121212', borderRadius: 24, marginHorizontal: 24, borderWidth: 1, borderColor: '#262626' },
+  permissionCard: { padding: 30, alignItems: 'center', backgroundColor: '#22252A', borderRadius: 22, marginHorizontal: 24 },
   permTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  permSub: { color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  permBtn: { backgroundColor: '#FF2D55', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 },
+  permSub: { color: '#9CA3AF', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  permBtn: { backgroundColor: '#E04644', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 16 },
   permBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   cancelBtn: { marginTop: 14, padding: 8 },
-  cancelBtnText: { color: '#666', fontSize: 13 }
+  cancelBtnText: { color: '#9CA3AF', fontSize: 13, fontWeight: '600' }
 });

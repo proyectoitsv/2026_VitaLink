@@ -27,7 +27,6 @@ export default function ProfileScreen({ navigation }) {
   const [foto, setFoto] = useState(null);
   const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
   
-  // Ficha Médica
   const [edad, setEdad] = useState('');
   const [tipoSangre, setTipoSangre] = useState('');
   const [condiciones, setCondiciones] = useState('');
@@ -113,7 +112,7 @@ export default function ProfileScreen({ navigation }) {
 
   const handleSelectAvatar = (avId) => {
     setSelectedAvatar(avId);
-    setFoto(null); // Al elegir avatar ilustrado, se reemplaza la foto
+    setFoto(null);
   };
 
   const handleSaveProfile = async () => {
@@ -148,29 +147,31 @@ export default function ProfileScreen({ navigation }) {
     navigation.replace('RoleSelection');
   };
 
-  if (!user) return <View style={styles.container}><ActivityIndicator color="#FF2D55" /></View>;
+  if (!user) return <View style={styles.container}><ActivityIndicator color="#E04644" /></View>;
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${uid}&color=255-255-255&bgcolor=18-18-18`;
-
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${uid}&color=255-255-255&bgcolor=24-26-31`;
   const activeAvatarObj = AVATARS.find(a => a.id === selectedAvatar) || AVATARS[0];
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <MaterialCommunityIcons name="chevron-left" size={32} color="#FFF" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mi Perfil</Text>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={styles.headerCategory}>PACIENTE</Text>
+          <Text style={styles.headerTitle}>Mi Perfil</Text>
+        </View>
         <TouchableOpacity 
-          style={[styles.saveHeaderBtn, savedSuccess && { backgroundColor: '#34C759' }]} 
+          style={[styles.saveHeaderBtn, savedSuccess && { backgroundColor: '#43C667' }]} 
           onPress={handleSaveProfile}
           disabled={saving}
         >
           {saving ? (
-            <ActivityIndicator size="small" color="#000" />
+            <ActivityIndicator size="small" color="#FFF" />
           ) : savedSuccess ? (
             <Text style={styles.saveHeaderBtnText}>✓ LISTO</Text>
           ) : (
@@ -185,13 +186,12 @@ export default function ProfileScreen({ navigation }) {
         <Animatable.View animation="fadeInDown" style={styles.card}>
           <Text style={styles.sectionLabel}>TU FOTO O AVATAR</Text>
 
-          {/* Compact Preview in Center */}
           <View style={styles.previewContainer}>
-            <View style={[styles.bigPreviewCircle, foto && styles.bigPreviewCircleWithPhoto]}>
+            <View style={styles.bigPreviewCircle}>
               {foto ? (
                 <Image source={{ uri: foto }} style={styles.previewImage} />
               ) : (
-                <MaterialCommunityIcons name={activeAvatarObj.id} size={50} color={activeAvatarObj.color} />
+                <MaterialCommunityIcons name={activeAvatarObj.id} size={48} color="#374151" />
               )}
             </View>
             <Text style={styles.previewStatusText}>
@@ -199,34 +199,32 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </View>
 
-          {/* Photo Actions Row */}
           <View style={styles.photoActionsRow}>
             <TouchableOpacity style={styles.photoActionBtn} onPress={handleTakePhoto} activeOpacity={0.8}>
-              <MaterialCommunityIcons name="camera" size={17} color="#FFF" style={{ marginRight: 6 }} />
+              <MaterialCommunityIcons name="camera" size={17} color="#E5E7EB" style={{ marginRight: 6 }} />
               <Text style={styles.photoActionBtnText}>Tomar Foto</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.photoActionBtn} onPress={handlePickGallery} activeOpacity={0.8}>
-              <MaterialCommunityIcons name="image-outline" size={17} color="#FFF" style={{ marginRight: 6 }} />
+              <MaterialCommunityIcons name="image-outline" size={17} color="#E5E7EB" style={{ marginRight: 6 }} />
               <Text style={styles.photoActionBtnText}>Subir Foto</Text>
             </TouchableOpacity>
           </View>
 
           {foto && (
             <TouchableOpacity style={styles.removePhotoBtn} onPress={handleRemovePhoto}>
-              <MaterialCommunityIcons name="close-circle-outline" size={15} color="#8E8E93" style={{ marginRight: 4 }} />
+              <MaterialCommunityIcons name="close-circle-outline" size={15} color="#9CA3AF" style={{ marginRight: 4 }} />
               <Text style={styles.removePhotoBtnText}>Quitar foto y usar avatar</Text>
             </TouchableOpacity>
           )}
 
-          {/* Collapsible Dropdown for Illustrated Avatars */}
           <TouchableOpacity 
             style={[styles.dropdownToggleBtn, showAvatarDropdown && styles.dropdownToggleBtnActive]} 
             onPress={() => setShowAvatarDropdown(!showAvatarDropdown)}
             activeOpacity={0.7}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <MaterialCommunityIcons name="emoticon-outline" size={20} color="#FF9500" style={{ marginRight: 8 }} />
+              <MaterialCommunityIcons name="emoticon-outline" size={20} color="#D4A359" style={{ marginRight: 8 }} />
               <Text style={styles.dropdownToggleText}>
                 {foto ? 'Opciones de avatar ilustrado' : `Avatar: ${activeAvatarObj.label}`}
               </Text>
@@ -234,7 +232,7 @@ export default function ProfileScreen({ navigation }) {
             <MaterialCommunityIcons 
               name={showAvatarDropdown ? 'chevron-up' : 'chevron-down'} 
               size={20} 
-              color="#8E8E93" 
+              color="#9CA3AF" 
             />
           </TouchableOpacity>
 
@@ -252,7 +250,7 @@ export default function ProfileScreen({ navigation }) {
                       key={av.id} 
                       style={[
                         styles.avatarCompactItem, 
-                        isSelected && { borderColor: av.color, backgroundColor: 'rgba(255,255,255,0.08)' }
+                        isSelected && { borderColor: '#43C667', backgroundColor: '#181A1F' }
                       ]} 
                       onPress={() => {
                         handleSelectAvatar(av.id);
@@ -264,7 +262,6 @@ export default function ProfileScreen({ navigation }) {
                       <Text style={[styles.avatarLabel, isSelected && { color: '#FFF', fontWeight: '700' }]}>
                         {av.label}
                       </Text>
-                      {isSelected && <View style={[styles.avatarDot, { backgroundColor: av.color }]} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -282,8 +279,8 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.inputLabel}>Nombre</Text>
               <TextInput 
                 style={styles.input} 
-                placeholder="Ej: Carlos"
-                placeholderTextColor="#555"
+                placeholder="Ej: Franco"
+                placeholderTextColor="#6B7280"
                 value={nombre}
                 onChangeText={setNombre}
               />
@@ -294,7 +291,7 @@ export default function ProfileScreen({ navigation }) {
               <TextInput 
                 style={styles.input} 
                 placeholder="Ej: Gómez"
-                placeholderTextColor="#555"
+                placeholderTextColor="#6B7280"
                 value={apellido}
                 onChangeText={setApellido}
               />
@@ -305,9 +302,9 @@ export default function ProfileScreen({ navigation }) {
             <View style={{ flex: 1, marginRight: 8 }}>
               <Text style={styles.inputLabel}>Edad</Text>
               <TextInput 
-                style={styles.input} 
+                style={[styles.input, { marginBottom: 4 }]} 
                 placeholder="Ej: 68"
-                placeholderTextColor="#555"
+                placeholderTextColor="#6B7280"
                 keyboardType="numeric"
                 maxLength={3}
                 value={edad}
@@ -318,9 +315,9 @@ export default function ProfileScreen({ navigation }) {
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={styles.inputLabel}>Grupo Sanguíneo</Text>
               <TextInput 
-                style={styles.input} 
-                placeholder="Ej: 0+"
-                placeholderTextColor="#555"
+                style={[styles.input, { marginBottom: 4 }]} 
+                placeholder="Ej: O+"
+                placeholderTextColor="#6B7280"
                 maxLength={4}
                 autoCapitalize="characters"
                 value={tipoSangre}
@@ -332,17 +329,14 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Emergency Medical Sheet Card */}
         <Animatable.View animation="fadeInUp" delay={200} style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <MaterialCommunityIcons name="card-account-details-outline" size={20} color="#FF2D55" />
-            <Text style={[styles.sectionLabel, { marginLeft: 8, marginBottom: 0 }]}>FICHA MÉDICA DE EMERGENCIA</Text>
-          </View>
+          <Text style={styles.sectionLabel}>FICHA MÉDICA DE EMERGENCIA</Text>
           <Text style={styles.sectionDesc}>Esta información ayudará a los médicos y familiares en caso de alerta o caída.</Text>
 
           <Text style={styles.inputLabel}>Condiciones Médicas / Diagnósticos</Text>
           <TextInput 
             style={styles.input} 
             placeholder="Ej: Hipertensión, Marcapasos, Diabético"
-            placeholderTextColor="#555"
+            placeholderTextColor="#6B7280"
             value={condiciones}
             onChangeText={setCondiciones}
           />
@@ -351,16 +345,16 @@ export default function ProfileScreen({ navigation }) {
           <TextInput 
             style={styles.input} 
             placeholder="Ej: Alérgico a la Penicilina, Ninguna"
-            placeholderTextColor="#555"
+            placeholderTextColor="#6B7280"
             value={alergias}
             onChangeText={setAlergias}
           />
 
           <Text style={styles.inputLabel}>Teléfono de Contacto de Emergencia</Text>
           <TextInput 
-            style={styles.input} 
+            style={[styles.input, { marginBottom: 4 }]} 
             placeholder="Ej: +54 9 11 2345-6789"
-            placeholderTextColor="#555"
+            placeholderTextColor="#6B7280"
             keyboardType="phone-pad"
             value={telefonoEmergencia}
             onChangeText={setTelefonoEmergencia}
@@ -380,13 +374,13 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Big Save Button */}
         <TouchableOpacity 
-          style={[styles.bigSaveBtn, savedSuccess && { backgroundColor: '#34C759' }]} 
+          style={[styles.bigSaveBtn, savedSuccess && { backgroundColor: '#43C667' }]} 
           onPress={handleSaveProfile}
           disabled={saving}
           activeOpacity={0.8}
         >
           {saving ? (
-            <ActivityIndicator color="#000" size="small" />
+            <ActivityIndicator color="#FFF" size="small" />
           ) : savedSuccess ? (
             <Text style={styles.bigSaveBtnText}>✓ PERFIL GUARDADO</Text>
           ) : (
@@ -396,7 +390,7 @@ export default function ProfileScreen({ navigation }) {
 
         {/* Logout */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-          <MaterialCommunityIcons name="logout" size={18} color="#FF2D55" />
+          <MaterialCommunityIcons name="logout" size={18} color="#E04644" />
           <Text style={styles.logoutText}>Cerrar Sesión</Text>
         </TouchableOpacity>
 
@@ -406,57 +400,55 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 50, paddingHorizontal: 16, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
-  backBtn: { padding: 4 },
-  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
-  saveHeaderBtn: { backgroundColor: '#FFF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
-  saveHeaderBtnText: { color: '#000', fontSize: 12, fontWeight: '800' },
+  container: { flex: 1, backgroundColor: '#0B0D10' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 15 },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
+  headerCategory: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 2 },
+  headerTitle: { color: '#FFF', fontSize: 20, fontWeight: '700' },
+  saveHeaderBtn: { backgroundColor: '#E04644', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16 },
+  saveHeaderBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   
-  scrollContent: { padding: 20, paddingBottom: 60 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 60 },
 
-  card: { backgroundColor: '#121212', borderRadius: 22, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  sectionLabel: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 12 },
-  sectionDesc: { color: '#666', fontSize: 12, lineHeight: 18, marginBottom: 16 },
+  card: { backgroundColor: '#22252A', borderRadius: 22, padding: 20, marginBottom: 16 },
+  sectionLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 12 },
+  sectionDesc: { color: '#9CA3AF', fontSize: 13, lineHeight: 19, marginBottom: 16 },
 
   // Big Preview
-  previewContainer: { alignItems: 'center', marginVertical: 10 },
-  bigPreviewCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#181818', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
-  bigPreviewCircleWithPhoto: { borderColor: '#34C759' },
+  previewContainer: { alignItems: 'center', marginVertical: 8 },
+  bigPreviewCircle: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   previewImage: { width: '100%', height: '100%' },
-  previewStatusText: { color: '#8E8E93', fontSize: 13, fontWeight: '600', marginTop: 8 },
+  previewStatusText: { color: '#9CA3AF', fontSize: 13, fontWeight: '600', marginTop: 8 },
 
   // Photo Action Buttons
-  photoActionsRow: { flexDirection: 'row', gap: 10, marginTop: 12, marginBottom: 4 },
-  photoActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E1E1E', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
-  photoActionBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  photoActionsRow: { flexDirection: 'row', gap: 10, marginTop: 10, marginBottom: 4 },
+  photoActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#181A1F', paddingVertical: 12, borderRadius: 14 },
+  photoActionBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
   removePhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginTop: 4 },
-  removePhotoBtnText: { color: '#8E8E93', fontSize: 12, fontWeight: '600' },
+  removePhotoBtnText: { color: '#9CA3AF', fontSize: 12, fontWeight: '600' },
 
   // Dropdown for Avatars
-  dropdownToggleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#181818', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14, marginTop: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  dropdownToggleBtnActive: { borderColor: '#FF9500', backgroundColor: 'rgba(255, 149, 0, 0.08)' },
-  dropdownToggleText: { color: '#EEE', fontSize: 13, fontWeight: '700' },
-  dropdownContent: { marginTop: 10, paddingVertical: 6 },
+  dropdownToggleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#181A1F', paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginTop: 10 },
+  dropdownToggleBtnActive: { borderWidth: 1, borderColor: '#D4A359' },
+  dropdownToggleText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
+  dropdownContent: { marginTop: 10, paddingVertical: 4 },
   avatarHorizontalScroll: { paddingVertical: 4, gap: 10 },
-  avatarCompactItem: { width: 78, backgroundColor: '#181818', borderRadius: 16, paddingVertical: 10, alignItems: 'center', borderWidth: 2, borderColor: 'transparent', position: 'relative' },
-  avatarLabel: { color: '#888', fontSize: 10, fontWeight: '600', marginTop: 4 },
-  avatarDot: { position: 'absolute', top: 5, right: 5, width: 6, height: 6, borderRadius: 3 },
+  avatarCompactItem: { width: 76, backgroundColor: '#181A1F', borderRadius: 14, paddingVertical: 10, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
+  avatarLabel: { color: '#9CA3AF', fontSize: 10, fontWeight: '600', marginTop: 4 },
 
   // Inputs
   row: { flexDirection: 'row' },
-  inputLabel: { color: '#AAA', fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  input: { backgroundColor: '#181818', color: '#FFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: '#262626' },
+  inputLabel: { color: '#E8EAED', fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  input: { backgroundColor: '#181A1F', color: '#FFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, marginBottom: 14 },
 
   // Code & QR
-  codeText: { color: '#FF2D55', fontSize: 32, fontWeight: '900', letterSpacing: 3, marginBottom: 8 },
-  qrWrapper: { alignSelf: 'center', padding: 14, backgroundColor: '#181818', borderRadius: 18, marginTop: 10 },
-  qrImage: { width: 210, height: 210 },
+  codeText: { color: '#E04644', fontSize: 30, fontWeight: '800', letterSpacing: 3, marginBottom: 6 },
+  qrWrapper: { alignSelf: 'center', padding: 14, backgroundColor: '#181A1F', borderRadius: 18, marginTop: 6 },
+  qrImage: { width: 200, height: 200 },
 
   // Buttons
-  bigSaveBtn: { backgroundColor: '#FFF', paddingVertical: 16, borderRadius: 14, alignItems: 'center', marginTop: 10, marginBottom: 15 },
-  bigSaveBtnText: { color: '#000', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
+  bigSaveBtn: { backgroundColor: '#E04644', paddingVertical: 16, borderRadius: 18, alignItems: 'center', marginTop: 6, marginBottom: 14 },
+  bigSaveBtnText: { color: '#FFF', fontSize: 14, fontWeight: '700', letterSpacing: 0.5 },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
-  logoutText: { color: '#FF2D55', fontSize: 14, fontWeight: '700', marginLeft: 6 }
+  logoutText: { color: '#E04644', fontSize: 14, fontWeight: '700', marginLeft: 6 }
 });

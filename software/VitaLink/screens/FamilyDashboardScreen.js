@@ -34,7 +34,6 @@ export default function FamilyDashboardScreen({ navigation, route }) {
   useEffect(() => {
     const db = getFirestore();
     
-    // Escuchar perfil del paciente en tiempo real (nombre, apellido, avatar, ficha médica)
     const unsubPaciente = onSnapshot(doc(db, 'pacientes', patientId), (docSnap) => {
       if (docSnap.exists()) {
         setPatientData(docSnap.data());
@@ -42,18 +41,15 @@ export default function FamilyDashboardScreen({ navigation, route }) {
     });
 
     let unsubFallback = () => {};
-    // Escuchar signos vitales live con fallback automático
     const unsubSignos = onSnapshot(doc(db, 'pacientes', patientId, 'signos_actuales', 'live'), (docSnap) => {
       if (docSnap.exists()) {
         setSignos(docSnap.data());
       } else {
-        // Fallback: si live aún no existe, consultar el historial reciente
         const qFallback = query(collection(db, 'pacientes', patientId, 'historial_signos'), orderBy('timestamp', 'desc'), limit(1));
         unsubFallback = onSnapshot(qFallback, (snapshot) => {
           if (!snapshot.empty) {
             setSignos(snapshot.docs[0].data());
           } else {
-            // Si la base está vacía pero el paciente existe, mostrar tarjetas con guiones
             setSignos({ bpm: '--', spo2: '--', bateria: '--', timestamp: null });
           }
         });
@@ -68,10 +64,9 @@ export default function FamilyDashboardScreen({ navigation, route }) {
     return () => { unsubPaciente(); unsubSignos(); unsubAlertas(); unsubFallback(); };
   }, [patientId]);
 
-  // Extraer únicamente el primer nombre para evitar desbordes en pantalla
   const firstName = patientData?.nombre ? patientData.nombre.trim().split(' ')[0] : '';
   const displayName = firstName || `Paciente ${patientId}`;
-  const avatar = patientData?.avatar || 'account-circle';
+  const avatar = patientData?.avatar || 'account';
 
   const lat = alerta?.ubicacion?.latitude || signos?.ubicacion?.latitude;
   const lng = alerta?.ubicacion?.longitude || signos?.ubicacion?.longitude;
@@ -94,16 +89,16 @@ export default function FamilyDashboardScreen({ navigation, route }) {
 
   const heartbeatAnim = {
     0: { transform: [{ scale: 1 }] },
-    0.15: { transform: [{ scale: 1.25 }] },
+    0.15: { transform: [{ scale: 1.18 }] },
     0.3: { transform: [{ scale: 1 }] },
-    0.45: { transform: [{ scale: 1.15 }] },
+    0.45: { transform: [{ scale: 1.1 }] },
     1: { transform: [{ scale: 1 }] }
   };
 
   const breatheAnim = {
-    0: { transform: [{ scale: 1 }], opacity: 0.6 },
-    0.5: { transform: [{ scale: 1.12 }], opacity: 1 },
-    1: { transform: [{ scale: 1 }], opacity: 0.6 }
+    0: { transform: [{ scale: 1 }], opacity: 0.85 },
+    0.5: { transform: [{ scale: 1.08 }], opacity: 1 },
+    1: { transform: [{ scale: 1 }], opacity: 0.85 }
   };
 
   const handleUnlinkPatient = () => {
@@ -130,10 +125,13 @@ export default function FamilyDashboardScreen({ navigation, route }) {
   };
 
   const isLive = signos && signos.bpm && signos.bpm !== '--';
+  const batNum = signos && signos.bateria ? parseInt(signos.bateria, 10) : NaN;
+  const batValid = !isNaN(batNum) && batNum >= 0;
+  const batBars = !batValid ? 2 : batNum > 66 ? 3 : batNum > 25 ? 2 : 1;
 
   return (
     <View style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         
         {/* Top Navigation Bar */}
@@ -144,17 +142,17 @@ export default function FamilyDashboardScreen({ navigation, route }) {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#FFF" />
+            <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
           </TouchableOpacity>
 
-          <View style={[styles.statusPill, isLive ? styles.statusPillLive : styles.statusPillStandby]}>
+          <View style={styles.statusPill}>
             <Animatable.View 
               animation="pulse" 
               iterationCount="infinite" 
-              style={[styles.statusDot, { backgroundColor: isLive ? '#34C759' : '#FF9500' }]} 
+              style={[styles.statusDot, { backgroundColor: isLive ? '#43C667' : '#D4A359' }]} 
             />
-            <Text style={[styles.statusPillText, { color: isLive ? '#34C759' : '#FF9500' }]}>
-              {isLive ? 'MONITOR EN VIVO' : 'EN ESPERA'}
+            <Text style={[styles.statusPillText, { color: isLive ? '#43C667' : '#D4A359' }]}>
+              {isLive ? 'VITALINK EN LÍNEA' : 'EN ESPERA'}
             </Text>
           </View>
 
@@ -164,7 +162,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons name="link-off" size={20} color="#8E8E93" />
+            <MaterialCommunityIcons name="link-off" size={20} color="#D1D5DB" />
           </TouchableOpacity>
         </View>
 
@@ -174,12 +172,15 @@ export default function FamilyDashboardScreen({ navigation, route }) {
             {patientData?.foto ? (
               <Image source={{ uri: patientData.foto }} style={styles.avatarImg} />
             ) : (
-              <MaterialCommunityIcons name={avatar} size={36} color="#FF2D55" />
+              <MaterialCommunityIcons name={avatar} size={34} color="#374151" />
             )}
           </View>
           <View style={styles.profileTextGroup}>
             <Text style={styles.headerSubtitle}>MONITOR DEL PACIENTE</Text>
-            <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={styles.headerName} numberOfLines={1}>{displayName}</Text>
+              <View style={[styles.inlineStatusDot, { backgroundColor: isLive ? '#43C667' : '#D4A359' }]} />
+            </View>
           </View>
         </Animatable.View>
 
@@ -188,14 +189,14 @@ export default function FamilyDashboardScreen({ navigation, route }) {
           <Animatable.View animation="fadeIn" delay={150} style={styles.chipsRow}>
             {patientData?.tipoSangre ? (
               <View style={styles.chip}>
-                <MaterialCommunityIcons name="water" size={14} color="#FF2D55" style={{ marginRight: 4 }} />
+                <MaterialCommunityIcons name="water" size={14} color="#E04644" style={{ marginRight: 4 }} />
                 <Text style={styles.chipText}>Grupo {patientData.tipoSangre}</Text>
               </View>
             ) : null}
 
             {patientData?.edad ? (
               <View style={styles.chip}>
-                <MaterialCommunityIcons name="account-clock-outline" size={14} color="#64D2FF" style={{ marginRight: 4 }} />
+                <MaterialCommunityIcons name="account-clock-outline" size={14} color="#3AB4F2" style={{ marginRight: 4 }} />
                 <Text style={styles.chipText}>{patientData.edad} años</Text>
               </View>
             ) : null}
@@ -206,7 +207,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
                 onPress={() => Linking.openURL(`tel:${patientData.telefonoEmergencia}`)}
                 activeOpacity={0.7}
               >
-                <MaterialCommunityIcons name="phone" size={14} color="#34C759" style={{ marginRight: 4 }} />
+                <MaterialCommunityIcons name="phone" size={14} color="#43C667" style={{ marginRight: 4 }} />
                 <Text style={styles.callChipText}>Llamar</Text>
               </TouchableOpacity>
             ) : null}
@@ -230,27 +231,36 @@ export default function FamilyDashboardScreen({ navigation, route }) {
             
             {/* BPM Hero Card */}
             <View style={styles.heroCard}>
-              <View style={styles.cardHeader}>
-                <Animatable.View animation="pulse" iterationCount="infinite" duration={1500}>
-                  <MaterialCommunityIcons name="heart-pulse" size={22} color="#FF2D55" />
-                </Animatable.View>
-                <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
-              </View>
+              <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
               
               <View style={styles.bpmContainer}>
-                <Animatable.View 
-                  animation={heartbeatAnim} 
-                  iterationCount="infinite" 
-                  duration={signos.bpm && signos.bpm !== '--' && signos.bpm !== '0' ? Math.max(500, 60000 / parseInt(signos.bpm)) : 1000}
-                  style={styles.heroIconWrapper}
-                >
-                  <MaterialCommunityIcons name="cards-heart" size={90} color="#FF2D55" />
-                </Animatable.View>
-                
-                <View style={styles.bpmTextWrapper}>
-                  <Text style={styles.bpmValue} adjustsFontSizeToFit numberOfLines={1}>{signos.bpm}</Text>
-                  <Text style={styles.bpmUnit}>LPM</Text>
+                <View style={styles.bpmLeftGroup}>
+                  <Animatable.View 
+                    animation={heartbeatAnim} 
+                    iterationCount="infinite" 
+                    duration={signos.bpm && signos.bpm !== '--' && signos.bpm !== '0' ? Math.max(500, 60000 / parseInt(signos.bpm)) : 1000}
+                  >
+                    <MaterialCommunityIcons name="cards-heart" size={44} color="#E04644" />
+                  </Animatable.View>
+                  
+                  <View style={styles.bpmTextRow}>
+                    <Text style={styles.bpmValue} numberOfLines={1}>{signos.bpm}</Text>
+                    <Text style={styles.bpmUnit}>LPM</Text>
+                  </View>
                 </View>
+
+                <Animatable.View
+                  animation="pulse"
+                  iterationCount="infinite"
+                  duration={1800}
+                  style={styles.ecgContainer}
+                >
+                  <Image
+                    source={require('../assets/ecg_wave.png')}
+                    style={styles.ecgImage}
+                    resizeMode="contain"
+                  />
+                </Animatable.View>
               </View>
             </View>
 
@@ -258,49 +268,50 @@ export default function FamilyDashboardScreen({ navigation, route }) {
             <View style={styles.rowCards}>
               {/* SpO2 Card */}
               <View style={[styles.smallCard, { flex: 1, marginRight: 8 }]}>
-                <View style={styles.cardHeader}>
-                  <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500}>
-                    <MaterialCommunityIcons name="water" size={19} color="#32ADE6" />
-                  </Animatable.View>
-                  <Text style={styles.cardTitle}>Oxígeno</Text>
-                </View>
+                <Text style={styles.cardTitle}>Oxígeno</Text>
+
+                <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500} style={styles.smallCardIconWrap}>
+                  <MaterialCommunityIcons name="water" size={48} color="#3AB4F2" />
+                </Animatable.View>
+
                 <View style={styles.metricContainer}>
                   <Text style={styles.smallCardValue}>{signos.spo2}</Text>
-                  <Text style={styles.smallCardUnit}>%</Text>
+                  <Text style={styles.smallCardUnit}> %</Text>
                 </View>
-                <Animatable.View 
-                  animation={breatheAnim} 
-                  iterationCount="infinite" 
-                  duration={2500}
-                  style={styles.glowSpO2}
-                />
               </View>
 
               {/* Battery Card */}
               <View style={[styles.smallCard, { flex: 1, marginLeft: 8 }]}>
-                <View style={styles.cardHeader}>
-                  <Animatable.View animation="pulse" iterationCount="infinite" duration={3000}>
-                    <MaterialCommunityIcons name="battery-charging-60" size={19} color="#34C759" />
-                  </Animatable.View>
-                  <Text style={styles.cardTitle}>Pulsera</Text>
+                <Text style={styles.cardTitle}>Batería</Text>
+
+                <View style={styles.smallCardIconWrap}>
+                  <View style={styles.customBatteryWrap}>
+                    <View style={styles.customBatteryCap} />
+                    <View style={styles.customBatteryBody}>
+                      <View style={[styles.customBatteryBar, { opacity: batBars >= 3 ? 0.45 : 0.15 }]} />
+                      <View style={[styles.customBatteryBar, { opacity: batBars >= 2 ? 1 : 0.2 }]} />
+                      <View style={[styles.customBatteryBar, { opacity: batBars >= 1 ? 1 : 0.2, marginBottom: 0 }]} />
+                    </View>
+                  </View>
                 </View>
+
                 <View style={styles.metricContainer}>
                   <Text style={styles.smallCardValue}>{signos.bateria}</Text>
-                  <Text style={styles.smallCardUnit}>%</Text>
+                  <Text style={styles.smallCardUnit}> %</Text>
                 </View>
               </View>
             </View>
 
             {/* Timestamp Footer */}
             <View style={styles.timeFooter}>
-              <MaterialCommunityIcons name="clock-outline" size={13} color="#666" style={{ marginRight: 6 }} />
+              <MaterialCommunityIcons name="clock-outline" size={13} color="#6B7280" style={{ marginRight: 6 }} />
               <Text style={styles.timeText}>ACTUALIZADO: {formatTime(signos.timestamp)}</Text>
             </View>
 
           </Animatable.View>
         ) : (
           <View style={styles.centerCard}>
-            <ActivityIndicator size="large" color="#FF2D55" />
+            <ActivityIndicator size="large" color="#E04644" />
             <Text style={styles.loadingText}>Conectando con el monitor...</Text>
           </View>
         )}
@@ -309,7 +320,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
         {lat && lng && (
           <Animatable.View animation="fadeInUp" delay={250} style={styles.mapCard}>
             <View style={styles.mapCardHeader}>
-              <MaterialCommunityIcons name="map-marker-radius" size={22} color="#FFFFFF" />
+              <MaterialCommunityIcons name="map-marker-radius" size={22} color="#E8EAED" />
               <Text style={styles.mapCardTitle}>Ubicación GPS</Text>
             </View>
             <TouchableOpacity 
@@ -331,74 +342,82 @@ export default function FamilyDashboardScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#050505' },
+  safeArea: { flex: 1, backgroundColor: '#0B0D10' },
   container: { paddingBottom: 50 },
 
   // Top Nav Bar
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 52, paddingBottom: 14 },
-  navCircleBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 42, paddingBottom: 14 },
+  navCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
   
   // Status Pill
-  statusPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
-  statusPillLive: { backgroundColor: 'rgba(52, 199, 89, 0.1)', borderColor: 'rgba(52, 199, 89, 0.25)' },
-  statusPillStandby: { backgroundColor: 'rgba(255, 149, 0, 0.1)', borderColor: 'rgba(255, 149, 0, 0.25)' },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 7 },
-  statusPillText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  statusPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', paddingHorizontal: 16, height: 40, borderRadius: 20 },
+  statusDot: { width: 9, height: 9, borderRadius: 4.5, marginRight: 8 },
+  statusPillText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
 
   // Patient Header Card
-  patientHeaderCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 14 },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,45,85,0.3)', marginRight: 14, overflow: 'hidden' },
+  patientHeaderCard: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 14 },
+  avatarCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
   profileTextGroup: { flex: 1 },
-  headerSubtitle: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 2 },
-  headerName: { color: '#FFFFFF', fontSize: 30, fontWeight: '700', letterSpacing: 0.3 },
+  headerSubtitle: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 2 },
+  headerName: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', letterSpacing: 0.2, flexShrink: 1 },
+  inlineStatusDot: { width: 9, height: 9, borderRadius: 4.5, marginLeft: 8, marginTop: 2 },
 
   // Medical Chips
-  chipsRow: { flexDirection: 'row', paddingHorizontal: 22, marginBottom: 18, flexWrap: 'wrap', gap: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#141414', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  chipText: { color: '#CCC', fontSize: 12, fontWeight: '700' },
-  callChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(52, 199, 89, 0.12)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(52, 199, 89, 0.3)' },
-  callChipText: { color: '#34C759', fontSize: 12, fontWeight: '800' },
+  chipsRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 16, flexWrap: 'wrap', gap: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 },
+  chipText: { color: '#E5E7EB', fontSize: 12, fontWeight: '600' },
+  callChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 },
+  callChipText: { color: '#43C667', fontSize: 12, fontWeight: '700' },
 
   // Alerts
-  alertCard: { backgroundColor: '#FF2D55', flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 22, marginHorizontal: 20, marginBottom: 18, shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12 },
+  alertCard: { backgroundColor: '#E04644', flexDirection: 'row', alignItems: 'center', padding: 18, borderRadius: 22, marginHorizontal: 20, marginBottom: 16 },
   alertTextGroup: { marginLeft: 14 },
-  alertTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  alertDesc: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600', marginTop: 2 },
+  alertTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', letterSpacing: 0.4 },
+  alertDesc: { color: 'rgba(255,255,255,0.88)', fontSize: 13, fontWeight: '600', marginTop: 2 },
 
   // Content
   content: { paddingHorizontal: 20 },
 
+  // Titles
+  cardTitle: { color: '#E8EAED', fontSize: 18, fontWeight: '600', letterSpacing: 0.1 },
+
   // Hero Card (BPM)
-  heroCard: { backgroundColor: '#121212', borderRadius: 30, padding: 22, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.5, shadowRadius: 16 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  cardTitle: { color: '#8E8E93', fontSize: 14, fontWeight: '700', marginLeft: 8, letterSpacing: 0.5 },
-  bpmContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  heroIconWrapper: { shadowColor: '#FF2D55', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 25 },
-  bpmTextWrapper: { alignItems: 'flex-end', flex: 1 },
-  bpmValue: { color: '#FFFFFF', fontSize: 96, fontWeight: '200', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -3, textAlign: 'right' },
-  bpmUnit: { color: '#FF2D55', fontSize: 18, fontWeight: '800', letterSpacing: 1, marginTop: -4 },
+  heroCard: { backgroundColor: '#22252A', borderRadius: 22, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, marginBottom: 16 },
+  bpmContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  bpmLeftGroup: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
+  bpmTextRow: { flexDirection: 'row', alignItems: 'baseline', marginLeft: 12 },
+  bpmValue: { color: '#FFFFFF', fontSize: 34, fontWeight: '600', fontVariant: ['tabular-nums'], includeFontPadding: false },
+  bpmUnit: { color: '#E8EAED', fontSize: 22, fontWeight: '500', marginLeft: 8 },
+  ecgContainer: { flex: 1, alignItems: 'flex-end', justifyContent: 'center', marginLeft: 10 },
+  ecgImage: { width: 155, height: 78 },
 
   // Row Cards
   rowCards: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14 },
-  smallCard: { backgroundColor: '#121212', borderRadius: 24, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' },
-  metricContainer: { flexDirection: 'row', alignItems: 'baseline', marginTop: 6 },
-  smallCardValue: { color: '#FFFFFF', fontSize: 46, fontWeight: '300', fontVariant: ['tabular-nums'], includeFontPadding: false, letterSpacing: -1 },
-  smallCardUnit: { color: '#8E8E93', fontSize: 16, fontWeight: '600', marginLeft: 4 },
-  glowSpO2: { position: 'absolute', bottom: -20, right: -20, width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(50, 173, 230, 0.15)' },
+  smallCard: { backgroundColor: '#22252A', borderRadius: 22, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, minHeight: 175, justifyContent: 'space-between' },
+  smallCardIconWrap: { alignSelf: 'flex-start', marginVertical: 12 },
+  metricContainer: { flexDirection: 'row', alignItems: 'baseline' },
+  smallCardValue: { color: '#FFFFFF', fontSize: 34, fontWeight: '600', fontVariant: ['tabular-nums'], includeFontPadding: false },
+  smallCardUnit: { color: '#FFFFFF', fontSize: 30, fontWeight: '500' },
+
+  // Battery Icon
+  customBatteryWrap: { alignItems: 'center', marginLeft: 4 },
+  customBatteryCap: { width: 12, height: 4, backgroundColor: '#43C667', borderTopLeftRadius: 2, borderTopRightRadius: 2, marginBottom: 1 },
+  customBatteryBody: { width: 26, height: 42, borderRadius: 4, borderWidth: 2.5, borderColor: '#43C667', padding: 3, justifyContent: 'space-between' },
+  customBatteryBar: { width: '100%', height: 9, backgroundColor: '#43C667', borderRadius: 1.5, marginBottom: 2 },
 
   // Footer
   timeFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8, marginBottom: 8 },
-  timeText: { color: '#555', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  timeText: { color: '#6B7280', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
 
   centerCard: { alignItems: 'center', paddingVertical: 50 },
-  loadingText: { marginTop: 14, color: '#8E8E93', fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+  loadingText: { marginTop: 14, color: '#9CA3AF', fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
 
   // Map Card
-  mapCard: { marginHorizontal: 20, marginTop: 6, borderRadius: 26, overflow: 'hidden', backgroundColor: '#121212', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  mapCardHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14 },
-  mapCardTitle: { color: '#8E8E93', fontSize: 14, fontWeight: '700', marginLeft: 8, letterSpacing: 0.5 },
-  map: { width: '100%', height: 210, opacity: 0.9 },
-  mapOverlay: { position: 'absolute', bottom: 14, alignSelf: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  mapCard: { marginHorizontal: 20, marginTop: 6, borderRadius: 22, overflow: 'hidden', backgroundColor: '#22252A' },
+  mapCardHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
+  mapCardTitle: { color: '#E8EAED', fontSize: 16, fontWeight: '600', marginLeft: 8 },
+  map: { width: '100%', height: 210, opacity: 0.92 },
+  mapOverlay: { position: 'absolute', bottom: 14, alignSelf: 'center', backgroundColor: '#FFFFFF', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 24, flexDirection: 'row', alignItems: 'center' },
   mapOverlayText: { color: '#000000', fontSize: 13, fontWeight: '800', letterSpacing: 0.3, marginRight: 4 }
 });

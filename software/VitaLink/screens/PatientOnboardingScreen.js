@@ -27,26 +27,22 @@ export default function PatientOnboardingScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [uid, setUid] = useState(null);
 
-  // Form State
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('account-circle');
   const [foto, setFoto] = useState(null);
   const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
 
-  // Medical Info State
   const [edad, setEdad] = useState('');
   const [tipoSangre, setTipoSangre] = useState('');
   const [telefonoEmergencia, setTelefonoEmergencia] = useState('');
 
-  // Link status
   const [familiarLinked, setFamiliarLinked] = useState(false);
 
   const auth = getAuth();
   const db = getFirestore();
 
   useEffect(() => {
-    // Asegurar usuario paciente anónimo
     let unsubUserDoc = () => {};
     const initUser = async () => {
       let u = auth.currentUser;
@@ -62,7 +58,6 @@ export default function PatientOnboardingScreen({ navigation }) {
         const cleanUid = u.uid.substring(0, 8);
         setUid(cleanUid);
 
-        // Escuchar si un familiar se vincula en tiempo real
         unsubUserDoc = onSnapshot(doc(db, 'pacientes', cleanUid), (snap) => {
           if (snap.exists()) {
             const data = snap.data();
@@ -78,7 +73,6 @@ export default function PatientOnboardingScreen({ navigation }) {
     return () => unsubUserDoc();
   }, []);
 
-  // Al detectarse vinculación del familiar en el paso 4, entrar automáticamente
   useEffect(() => {
     if (familiarLinked && step === 4) {
       const timer = setTimeout(() => {
@@ -146,7 +140,6 @@ export default function PatientOnboardingScreen({ navigation }) {
   };
 
   const handleNextStep3 = async () => {
-    // Guardar los datos en Firestore antes de pasar al paso de vinculación
     await saveUserData(false);
     setStep(4);
   };
@@ -179,11 +172,11 @@ export default function PatientOnboardingScreen({ navigation }) {
   };
 
   const activeAvatarObj = AVATARS.find(a => a.id === selectedAvatar) || AVATARS[0];
-  const qrUrl = uid ? `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${uid}&color=255-255-255&bgcolor=18-18-18` : null;
+  const qrUrl = uid ? `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${uid}&color=255-255-255&bgcolor=24-26-31` : null;
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
 
       {/* Top Bar & Step Progress */}
       <View style={styles.topBar}>
@@ -195,10 +188,9 @@ export default function PatientOnboardingScreen({ navigation }) {
           }}
           activeOpacity={0.7}
         >
-          <MaterialCommunityIcons name="chevron-left" size={28} color="#FFF" />
+          <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
         </TouchableOpacity>
 
-        {/* Step Indicator Pills */}
         <View style={styles.stepsPillContainer}>
           {[1, 2, 3, 4].map((i) => (
             <View 
@@ -223,285 +215,280 @@ export default function PatientOnboardingScreen({ navigation }) {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={{ flex: 1 }}>
             {/* STEP 1: Nombre y Apellido */}
-        {step === 1 && (
-          <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
-            <View style={styles.stepHeader}>
-              <View style={styles.iconCircle}>
-                <Animatable.View animation="pulse" iterationCount="infinite" duration={2200}>
-                  <MaterialCommunityIcons name="account" size={32} color="#FF2D55" />
-                </Animatable.View>
-              </View>
-              <Text style={styles.title}>¿Cómo te llamás?</Text>
-              <Text style={styles.subtitle}>
-                Ingresá tus datos para que tus familiares y médicos te reconozcan.
-              </Text>
-            </View>
+            {step === 1 && (
+              <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
+                <View style={styles.stepHeader}>
+                  <View style={styles.iconCircle}>
+                    <MaterialCommunityIcons name="account" size={32} color="#E04644" />
+                  </View>
+                  <Text style={styles.categoryLabel}>PASO 1 DE 4</Text>
+                  <Text style={styles.title}>¿Cómo te llamás?</Text>
+                  <Text style={styles.subtitle}>
+                    Ingresá tus datos para que tus familiares y médicos te reconozcan.
+                  </Text>
+                </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>NOMBRE</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="Ej: Carlos"
-                placeholderTextColor="#555"
-                value={nombre}
-                onChangeText={setNombre}
-              />
+                <View style={styles.cardBox}>
+                  <Text style={styles.label}>NOMBRE</Text>
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="Ej: Franco"
+                    placeholderTextColor="#6B7280"
+                    value={nombre}
+                    onChangeText={setNombre}
+                  />
 
-              <Text style={styles.label}>APELLIDO</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="Ej: Gómez"
-                placeholderTextColor="#555"
-                value={apellido}
-                onChangeText={setApellido}
-              />
-            </View>
+                  <Text style={styles.label}>APELLIDO</Text>
+                  <TextInput 
+                    style={[styles.input, { marginBottom: 4 }]} 
+                    placeholder="Ej: Gómez"
+                    placeholderTextColor="#6B7280"
+                    value={apellido}
+                    onChangeText={setApellido}
+                  />
+                </View>
 
-            <View style={styles.bottomActions}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleNextStep1} activeOpacity={0.8}>
-                <Text style={styles.primaryBtnText}>Continuar</Text>
-                <MaterialCommunityIcons name="arrow-right" size={20} color="#000" style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-            </View>
-          </Animatable.View>
-        )}
-
-        {/* STEP 2: Foto o Avatar */}
-        {step === 2 && (
-          <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
-            <View style={styles.stepHeader}>
-              <Text style={styles.title}>Tu Foto o Avatar</Text>
-              <Text style={styles.subtitle}>
-                Elegí cómo querés identificarte en la pantalla de tu familiar.
-              </Text>
-            </View>
-
-            {/* Preview Circle */}
-            <View style={styles.avatarPreviewSection}>
-              <View style={[styles.avatarCirclePreview, foto && styles.avatarCircleWithPhoto]}>
-                {foto ? (
-                  <Image source={{ uri: foto }} style={styles.avatarImg} />
-                ) : (
-                  <MaterialCommunityIcons name={activeAvatarObj.id} size={46} color={activeAvatarObj.color} />
-                )}
-              </View>
-              <Text style={styles.avatarStatusText}>
-                {foto ? 'Foto personalizada' : `Avatar: ${activeAvatarObj.label}`}
-              </Text>
-            </View>
-
-            {/* Photo Action Buttons */}
-            <View style={styles.photoBtnRow}>
-              <TouchableOpacity style={styles.photoBtn} onPress={handleTakePhoto} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="camera" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                <Text style={styles.photoBtnText}>Tomar Foto</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.photoBtn} onPress={handlePickGallery} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="image-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                <Text style={styles.photoBtnText}>Subir Foto</Text>
-              </TouchableOpacity>
-            </View>
-
-            {foto && (
-              <TouchableOpacity 
-                style={styles.removePhotoBtn} 
-                onPress={() => setFoto(null)}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons name="close-circle-outline" size={15} color="#8E8E93" style={{ marginRight: 4 }} />
-                <Text style={styles.removePhotoText}>Quitar foto y usar avatar</Text>
-              </TouchableOpacity>
+                <View style={styles.bottomActions}>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={handleNextStep1} activeOpacity={0.8}>
+                    <Text style={styles.primaryBtnText}>Continuar</Text>
+                    <MaterialCommunityIcons name="arrow-right" size={20} color="#FFF" style={{ marginLeft: 8 }} />
+                  </TouchableOpacity>
+                </View>
+              </Animatable.View>
             )}
 
-            {/* Compact Collapsible Dropdown for Illustrated Avatars */}
-            <TouchableOpacity 
-              style={[styles.dropdownBtn, showAvatarDropdown && styles.dropdownBtnActive]} 
-              onPress={() => setShowAvatarDropdown(!showAvatarDropdown)}
-              activeOpacity={0.7}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialCommunityIcons name="emoticon-outline" size={18} color="#FF9500" style={{ marginRight: 8 }} />
-                <Text style={styles.dropdownBtnText}>
-                  {foto ? 'Elegir avatar ilustrado' : `Avatar: ${activeAvatarObj.label}`}
-                </Text>
-              </View>
-              <MaterialCommunityIcons 
-                name={showAvatarDropdown ? 'chevron-up' : 'chevron-down'} 
-                size={18} 
-                color="#8E8E93" 
-              />
-            </TouchableOpacity>
+            {/* STEP 2: Foto o Avatar */}
+            {step === 2 && (
+              <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
+                <View style={styles.stepHeader}>
+                  <Text style={styles.categoryLabel}>PASO 2 DE 4</Text>
+                  <Text style={styles.title}>Tu Foto o Avatar</Text>
+                  <Text style={styles.subtitle}>
+                    Elegí cómo querés identificarte en la pantalla de tu familiar.
+                  </Text>
+                </View>
 
-            {showAvatarDropdown && (
-              <View style={styles.avatarScrollContainer}>
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.avatarScrollContent}
-                >
-                  {AVATARS.map((av) => {
-                    const isSelected = !foto && selectedAvatar === av.id;
-                    return (
-                      <TouchableOpacity 
-                        key={av.id} 
-                        style={[
-                          styles.avatarItem, 
-                          isSelected && { borderColor: av.color, backgroundColor: 'rgba(255,255,255,0.08)' }
-                        ]} 
-                        onPress={() => {
-                          setSelectedAvatar(av.id);
-                          setFoto(null);
-                          setShowAvatarDropdown(false);
-                        }}
-                        activeOpacity={0.7}
+                <View style={styles.cardBox}>
+                  <View style={styles.avatarPreviewSection}>
+                    <View style={styles.avatarCirclePreview}>
+                      {foto ? (
+                        <Image source={{ uri: foto }} style={styles.avatarImg} />
+                      ) : (
+                        <MaterialCommunityIcons name={activeAvatarObj.id} size={46} color="#374151" />
+                      )}
+                    </View>
+                    <Text style={styles.avatarStatusText}>
+                      {foto ? 'Foto personalizada' : `Avatar: ${activeAvatarObj.label}`}
+                    </Text>
+                  </View>
+
+                  <View style={styles.photoBtnRow}>
+                    <TouchableOpacity style={styles.photoBtn} onPress={handleTakePhoto} activeOpacity={0.8}>
+                      <MaterialCommunityIcons name="camera" size={18} color="#E5E7EB" style={{ marginRight: 6 }} />
+                      <Text style={styles.photoBtnText}>Tomar Foto</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.photoBtn} onPress={handlePickGallery} activeOpacity={0.8}>
+                      <MaterialCommunityIcons name="image-outline" size={18} color="#E5E7EB" style={{ marginRight: 6 }} />
+                      <Text style={styles.photoBtnText}>Subir Foto</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {foto && (
+                    <TouchableOpacity 
+                      style={styles.removePhotoBtn} 
+                      onPress={() => setFoto(null)}
+                      activeOpacity={0.7}
+                    >
+                      <MaterialCommunityIcons name="close-circle-outline" size={15} color="#9CA3AF" style={{ marginRight: 4 }} />
+                      <Text style={styles.removePhotoText}>Quitar foto y usar avatar</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity 
+                    style={[styles.dropdownBtn, showAvatarDropdown && styles.dropdownBtnActive]} 
+                    onPress={() => setShowAvatarDropdown(!showAvatarDropdown)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <MaterialCommunityIcons name="emoticon-outline" size={18} color="#D4A359" style={{ marginRight: 8 }} />
+                      <Text style={styles.dropdownBtnText}>
+                        {foto ? 'Elegir avatar ilustrado' : `Avatar: ${activeAvatarObj.label}`}
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons 
+                      name={showAvatarDropdown ? 'chevron-up' : 'chevron-down'} 
+                      size={18} 
+                      color="#9CA3AF" 
+                    />
+                  </TouchableOpacity>
+
+                  {showAvatarDropdown && (
+                    <View style={styles.avatarScrollContainer}>
+                      <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.avatarScrollContent}
                       >
-                        <MaterialCommunityIcons name={av.id} size={26} color={av.color} />
-                        <Text style={[styles.avatarItemText, isSelected && { color: '#FFF', fontWeight: '700' }]}>
-                          {av.label}
-                        </Text>
-                        {isSelected && <View style={[styles.avatarDot, { backgroundColor: av.color }]} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
+                        {AVATARS.map((av) => {
+                          const isSelected = !foto && selectedAvatar === av.id;
+                          return (
+                            <TouchableOpacity 
+                              key={av.id} 
+                              style={[
+                                styles.avatarItem, 
+                                isSelected && { borderColor: '#43C667', backgroundColor: '#181A1F' }
+                              ]} 
+                              onPress={() => {
+                                setSelectedAvatar(av.id);
+                                setFoto(null);
+                                setShowAvatarDropdown(false);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <MaterialCommunityIcons name={av.id} size={26} color={av.color} />
+                              <Text style={[styles.avatarItemText, isSelected && { color: '#FFF', fontWeight: '700' }]}>
+                                {av.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.bottomActions}>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={handleNextStep2} activeOpacity={0.8}>
+                    <Text style={styles.primaryBtnText}>Continuar</Text>
+                    <MaterialCommunityIcons name="arrow-right" size={20} color="#FFF" style={{ marginLeft: 8 }} />
+                  </TouchableOpacity>
+                </View>
+              </Animatable.View>
             )}
 
-            <View style={styles.bottomActions}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleNextStep2} activeOpacity={0.8}>
-                <Text style={styles.primaryBtnText}>Continuar</Text>
-                <MaterialCommunityIcons name="arrow-right" size={20} color="#000" style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-            </View>
-          </Animatable.View>
-        )}
+            {/* STEP 3: Ficha Médica de Emergencia */}
+            {step === 3 && (
+              <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
+                <View style={styles.stepHeader}>
+                  <View style={styles.iconCircle}>
+                    <MaterialCommunityIcons name="clipboard-pulse-outline" size={32} color="#43C667" />
+                  </View>
+                  <Text style={styles.categoryLabel}>PASO 3 DE 4</Text>
+                  <Text style={styles.title}>Ficha de Salud</Text>
+                  <Text style={styles.subtitle}>
+                    Información de emergencia opcional para asistir a tus cuidadores.
+                  </Text>
+                </View>
 
-        {/* STEP 3: Ficha Médica de Emergencia */}
-        {step === 3 && (
-          <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCard}>
-            <View style={styles.stepHeader}>
-              <View style={styles.iconCircle}>
-                <Animatable.View animation="pulse" iterationCount="infinite" duration={2200}>
-                  <MaterialCommunityIcons name="clipboard-pulse-outline" size={32} color="#34C759" />
-                </Animatable.View>
-              </View>
-              <Text style={styles.title}>Ficha de Salud</Text>
-              <Text style={styles.subtitle}>
-                Información de emergencia opcional para asistir a tus cuidadores.
-              </Text>
-            </View>
+                <View style={styles.cardBox}>
+                  <View style={styles.row}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={styles.label}>EDAD</Text>
+                      <TextInput 
+                        style={styles.input} 
+                        placeholder="Ej: 68"
+                        placeholderTextColor="#6B7280"
+                        keyboardType="number-pad"
+                        value={edad}
+                        onChangeText={setEdad}
+                      />
+                    </View>
 
-            <View style={styles.formGroup}>
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: 8 }}>
-                  <Text style={styles.label}>EDAD</Text>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <Text style={styles.label}>GRUPO SANGUÍNEO</Text>
+                      <TextInput 
+                        style={styles.input} 
+                        placeholder="Ej: O+"
+                        placeholderTextColor="#6B7280"
+                        autoCapitalize="characters"
+                        value={tipoSangre}
+                        onChangeText={setTipoSangre}
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={styles.label}>TELÉFONO DE CONTACTO</Text>
                   <TextInput 
-                    style={styles.input} 
-                    placeholder="Ej: 68"
-                    placeholderTextColor="#555"
-                    keyboardType="number-pad"
-                    value={edad}
-                    onChangeText={setEdad}
+                    style={[styles.input, { marginBottom: 4 }]} 
+                    placeholder="Ej: +54 9 11 1234-5678"
+                    placeholderTextColor="#6B7280"
+                    keyboardType="phone-pad"
+                    value={telefonoEmergencia}
+                    onChangeText={setTelefonoEmergencia}
                   />
                 </View>
 
-                <View style={{ flex: 1, marginLeft: 8 }}>
-                  <Text style={styles.label}>GRUPO SANGUÍNEO</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder="Ej: O+"
-                    placeholderTextColor="#555"
-                    autoCapitalize="characters"
-                    value={tipoSangre}
-                    onChangeText={setTipoSangre}
-                  />
+                <View style={styles.bottomActions}>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={handleNextStep3} activeOpacity={0.8}>
+                    <Text style={styles.primaryBtnText}>Continuar</Text>
+                    <MaterialCommunityIcons name="arrow-right" size={20} color="#FFF" style={{ marginLeft: 8 }} />
+                  </TouchableOpacity>
                 </View>
-              </View>
+              </Animatable.View>
+            )}
 
-              <Text style={styles.label}>TELÉFONO DE CONTACTO</Text>
-              <TextInput 
-                style={styles.input} 
-                placeholder="Ej: +54 9 11 1234-5678"
-                placeholderTextColor="#555"
-                keyboardType="phone-pad"
-                value={telefonoEmergencia}
-                onChangeText={setTelefonoEmergencia}
-              />
-            </View>
-
-            <View style={styles.bottomActions}>
-              <TouchableOpacity style={styles.primaryBtn} onPress={handleNextStep3} activeOpacity={0.8}>
-                <Text style={styles.primaryBtnText}>Continuar</Text>
-                <MaterialCommunityIcons name="arrow-right" size={20} color="#000" style={{ marginLeft: 6 }} />
-              </TouchableOpacity>
-            </View>
-          </Animatable.View>
-        )}
-
-        {/* STEP 4: Vincular con un Familiar (Paso Final) */}
-        {step === 4 && (
-          <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCardLink}>
-            <View style={styles.stepHeader}>
-              <Text style={styles.title}>Vinculá a tu Familiar</Text>
-              <Text style={styles.subtitle}>
-                Tu familiar debe escanear este código QR o ingresar tu código en su aplicación.
-              </Text>
-            </View>
-
-            {/* Code Box & QR */}
-            <View style={styles.linkCard}>
-              <Text style={styles.codeLabel}>CÓDIGO DE VINCULACIÓN</Text>
-              <View style={styles.codeBadge}>
-                <Text style={styles.codeText}>{uid || '...'}</Text>
-              </View>
-
-              {qrUrl ? (
-                <View style={styles.qrBox}>
-                  <Image source={{ uri: qrUrl }} style={styles.qrImage} />
+            {/* STEP 4: Vincular con un Familiar */}
+            {step === 4 && (
+              <Animatable.View animation="fadeInRight" duration={350} style={styles.stepCardLink}>
+                <View style={styles.stepHeader}>
+                  <Text style={styles.categoryLabel}>PASO 4 DE 4</Text>
+                  <Text style={styles.title}>Vinculá a tu Familiar</Text>
+                  <Text style={styles.subtitle}>
+                    Tu familiar debe escanear este código QR o ingresar tu código en su aplicación.
+                  </Text>
                 </View>
-              ) : (
-                <ActivityIndicator color="#FF2D55" style={{ marginVertical: 30 }} />
-              )}
 
-              {/* Dynamic Status / Auto-entry indicator */}
-              {familiarLinked ? (
-                <Animatable.View animation="bounceIn" style={styles.linkedSuccessBadge}>
-                  <MaterialCommunityIcons name="check-circle" size={20} color="#34C759" style={{ marginRight: 6 }} />
-                  <Text style={styles.linkedSuccessText}>¡Familiar vinculado! Ingresando...</Text>
-                </Animatable.View>
-              ) : (
-                <View style={styles.waitingBadge}>
-                  <Animatable.View 
-                    animation="pulse" 
-                    iterationCount="infinite" 
-                    style={styles.waitingDot} 
-                  />
-                  <Text style={styles.waitingText}>Esperando que tu familiar se conecte...</Text>
+                <View style={styles.linkCard}>
+                  <Text style={styles.codeLabel}>CÓDIGO DE VINCULACIÓN</Text>
+                  <View style={styles.codeBadge}>
+                    <Text style={styles.codeText}>{uid || '...'}</Text>
+                  </View>
+
+                  {qrUrl ? (
+                    <View style={styles.qrBox}>
+                      <Image source={{ uri: qrUrl }} style={styles.qrImage} />
+                    </View>
+                  ) : (
+                    <ActivityIndicator color="#E04644" style={{ marginVertical: 30 }} />
+                  )}
+
+                  {familiarLinked ? (
+                    <Animatable.View animation="bounceIn" style={styles.linkedSuccessBadge}>
+                      <MaterialCommunityIcons name="check-circle" size={18} color="#43C667" style={{ marginRight: 6 }} />
+                      <Text style={styles.linkedSuccessText}>¡Familiar vinculado! Ingresando...</Text>
+                    </Animatable.View>
+                  ) : (
+                    <View style={styles.waitingBadge}>
+                      <Animatable.View 
+                        animation="pulse" 
+                        iterationCount="infinite" 
+                        style={styles.waitingDot} 
+                      />
+                      <Text style={styles.waitingText}>Esperando que tu familiar se conecte...</Text>
+                    </View>
+                  )}
                 </View>
-              )}
-            </View>
 
-            {/* Bottom Actions: Omitir */}
-            <View style={styles.bottomActionsFinal}>
-              <TouchableOpacity 
-                style={styles.skipBtn} 
-                onPress={() => handleFinish(true)}
-                activeOpacity={0.7}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator size="small" color="#8E8E93" />
-                ) : (
-                  <>
-                    <Text style={styles.skipBtnText}>Omitir por ahora y comenzar</Text>
-                    <MaterialCommunityIcons name="arrow-right" size={16} color="#8E8E93" style={{ marginLeft: 4 }} />
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </Animatable.View>
-        )}
+                <View style={styles.bottomActionsFinal}>
+                  <TouchableOpacity 
+                    style={styles.skipBtn} 
+                    onPress={() => handleFinish(true)}
+                    activeOpacity={0.7}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color="#E5E7EB" />
+                    ) : (
+                      <>
+                        <Text style={styles.skipBtnText}>Omitir por ahora y comenzar</Text>
+                        <MaterialCommunityIcons name="arrow-right" size={16} color="#E5E7EB" style={{ marginLeft: 6 }} />
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </Animatable.View>
+            )}
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -510,77 +497,76 @@ export default function PatientOnboardingScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050505' },
+  container: { flex: 1, backgroundColor: '#0B0D10' },
 
   // Top Bar
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 52, paddingHorizontal: 20, paddingBottom: 12 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 12 },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
   stepsPillContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepDot: { width: 20, height: 6, borderRadius: 3, backgroundColor: '#222' },
-  stepDotActive: { width: 32, backgroundColor: '#FF2D55' },
-  stepDotCompleted: { backgroundColor: '#34C759' },
-  stepCounterWrapper: { width: 40, alignItems: 'flex-end' },
-  stepCounterText: { color: '#8E8E93', fontSize: 13, fontWeight: '700' },
+  stepDot: { width: 20, height: 6, borderRadius: 3, backgroundColor: '#22252A' },
+  stepDotActive: { width: 32, backgroundColor: '#E04644' },
+  stepDotCompleted: { backgroundColor: '#43C667' },
+  stepCounterWrapper: { width: 44, alignItems: 'flex-end' },
+  stepCounterText: { color: '#9CA3AF', fontSize: 13, fontWeight: '700' },
 
-  // Content Container (Fixed layout, NO scroll overflow)
-  contentContainer: { flex: 1, paddingHorizontal: 22, justifyContent: 'flex-start', paddingTop: 8 },
+  // Content Container
+  contentContainer: { flex: 1, paddingHorizontal: 20, justifyContent: 'flex-start', paddingTop: 6 },
   stepCard: { flex: 1, justifyContent: 'flex-start', paddingVertical: 4 },
   stepCardLink: { flex: 1, justifyContent: 'space-between', paddingVertical: 4 },
 
   // Step Header
-  stepHeader: { alignItems: 'center', marginTop: 4, marginBottom: 14 },
-  iconCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,45,85,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,45,85,0.2)' },
-  title: { color: '#FFF', fontSize: 24, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3, marginBottom: 6 },
-  subtitle: { color: '#8E8E93', fontSize: 13, textAlign: 'center', lineHeight: 18, paddingHorizontal: 12 },
+  stepHeader: { alignItems: 'center', marginTop: 4, marginBottom: 16 },
+  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  categoryLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 4 },
+  title: { color: '#FFF', fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 6 },
+  subtitle: { color: '#9CA3AF', fontSize: 13.5, textAlign: 'center', lineHeight: 19, paddingHorizontal: 12 },
 
-  // Form Elements
-  formGroup: { marginTop: 4, marginBottom: 12 },
-  label: { color: '#8E8E93', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 6 },
-  input: { backgroundColor: '#141414', color: '#FFF', fontSize: 16, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginBottom: 14, borderWidth: 1, borderColor: '#222' },
+  // Card Box & Form Elements
+  cardBox: { backgroundColor: '#22252A', borderRadius: 22, padding: 20 },
+  label: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 },
+  input: { backgroundColor: '#181A1F', color: '#FFF', fontSize: 16, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginBottom: 14 },
   row: { flexDirection: 'row' },
 
   // Avatar Step
-  avatarPreviewSection: { alignItems: 'center', marginTop: 4, marginBottom: 8 },
-  avatarCirclePreview: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#141414', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' },
-  avatarCircleWithPhoto: { borderColor: '#34C759' },
+  avatarPreviewSection: { alignItems: 'center', marginTop: 2, marginBottom: 10 },
+  avatarCirclePreview: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
-  avatarStatusText: { color: '#8E8E93', fontSize: 12, fontWeight: '600', marginTop: 6 },
+  avatarStatusText: { color: '#9CA3AF', fontSize: 12, fontWeight: '600', marginTop: 8 },
 
-  photoBtnRow: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  photoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#141414', paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  photoBtnText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
-  removePhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6 },
-  removePhotoText: { color: '#8E8E93', fontSize: 11, fontWeight: '600' },
+  photoBtnRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  photoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#181A1F', paddingVertical: 12, borderRadius: 14 },
+  photoBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
+  removePhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  removePhotoText: { color: '#9CA3AF', fontSize: 11, fontWeight: '600' },
 
-  dropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#121212', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, marginTop: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  dropdownBtnActive: { borderColor: '#FF9500', backgroundColor: 'rgba(255, 149, 0, 0.08)' },
-  dropdownBtnText: { color: '#EEE', fontSize: 12, fontWeight: '700' },
-  avatarScrollContainer: { marginTop: 8 },
+  dropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#181A1F', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, marginTop: 10 },
+  dropdownBtnActive: { borderWidth: 1, borderColor: '#D4A359' },
+  dropdownBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
+  avatarScrollContainer: { marginTop: 10 },
   avatarScrollContent: { gap: 8, paddingVertical: 2 },
-  avatarItem: { width: 70, backgroundColor: '#141414', borderRadius: 12, paddingVertical: 8, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent', position: 'relative' },
-  avatarItemText: { color: '#777', fontSize: 9, fontWeight: '600', marginTop: 3 },
-  avatarDot: { position: 'absolute', top: 4, right: 4, width: 5, height: 5, borderRadius: 2.5 },
+  avatarItem: { width: 70, backgroundColor: '#181A1F', borderRadius: 14, paddingVertical: 8, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
+  avatarItemText: { color: '#9CA3AF', fontSize: 10, fontWeight: '600', marginTop: 3 },
 
-  // Step 4: Link Card (Much larger QR and Code)
-  linkCard: { alignItems: 'center', backgroundColor: '#121212', borderRadius: 22, paddingVertical: 16, paddingHorizontal: 16, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  codeLabel: { color: '#8E8E93', fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
-  codeBadge: { backgroundColor: '#1E1E1E', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  codeText: { color: '#FF2D55', fontSize: 32, fontWeight: '900', letterSpacing: 4 },
-  qrBox: { padding: 12, backgroundColor: '#181818', borderRadius: 18, marginBottom: 12 },
-  qrImage: { width: 210, height: 210 },
+  // Step 4: Link Card
+  linkCard: { alignItems: 'center', backgroundColor: '#22252A', borderRadius: 22, paddingVertical: 18, paddingHorizontal: 18, marginVertical: 4 },
+  codeLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 6 },
+  codeBadge: { backgroundColor: '#181A1F', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 14, marginBottom: 12 },
+  codeText: { color: '#E04644', fontSize: 30, fontWeight: '800', letterSpacing: 3 },
+  qrBox: { padding: 12, backgroundColor: '#181A1F', borderRadius: 18, marginBottom: 12 },
+  qrImage: { width: 200, height: 200 },
 
-  waitingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,149,0,0.1)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,149,0,0.25)' },
-  waitingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF9500', marginRight: 8 },
-  waitingText: { color: '#FF9500', fontSize: 11, fontWeight: '700' },
-  linkedSuccessBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(52,199,89,0.15)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' },
-  linkedSuccessText: { color: '#34C759', fontSize: 13, fontWeight: '800' },
+  waitingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  waitingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D4A359', marginRight: 8 },
+  waitingText: { color: '#D4A359', fontSize: 11, fontWeight: '700' },
+  linkedSuccessBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  linkedSuccessText: { color: '#43C667', fontSize: 13, fontWeight: '700' },
 
   // Bottom Buttons
   bottomActions: { marginTop: 18, marginBottom: 10 },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 16, borderRadius: 16, shadowColor: '#FFF', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8 },
-  primaryBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
+  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E04644', paddingVertical: 16, borderRadius: 18 },
+  primaryBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
-  bottomActionsFinal: { alignItems: 'center', marginTop: 8, marginBottom: 8 },
-  skipBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 16 },
-  skipBtnText: { color: '#8E8E93', fontSize: 13, fontWeight: '700' }
+  bottomActionsFinal: { alignItems: 'center', marginTop: 8, marginBottom: 12 },
+  skipBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', paddingVertical: 13, paddingHorizontal: 22, borderRadius: 20 },
+  skipBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' }
 });
