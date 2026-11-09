@@ -10,7 +10,7 @@
 const int PIN_LED = LED_BUILTIN;
 const int PIN_BOTON = 44; // D7 en XIAO ESP32 S3
 
-// Umbrales
+// Umbrales originales de la rama
 const float UMBRAL_CAIDA_LIBRE = 0.6;
 const float UMBRAL_IMPACTO = 4.0;
 const unsigned long VENTANA_TIEMPO = 500;
@@ -18,5 +18,6 @@ const unsigned long VENTANA_TIEMPO = 500;
 // API pública del módulo
 void inicializarDetector();
 void detectarCaidas();
+bool hayAlertaCaida();
 
 #endif // DETECTOR_CAIDAS_H
