@@ -13,12 +13,15 @@ static void resetearVariablesOTA() {
     otaEnCurso = false;
     tamanoTotalEsperado = 0;
     bytesRecibidos = 0;
+    setCpuFrequencyMhz(80);
 }
 
 bool iniciarActualizacionOTA(size_t tamanoTotal) {
     if (otaEnCurso) {
         Update.abort();
     }
+
+    setCpuFrequencyMhz(240);
 
     size_t tamano = (tamanoTotal > 0) ? tamanoTotal : UPDATE_SIZE_UNKNOWN;
 

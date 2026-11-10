@@ -61,6 +61,7 @@ class MisCallbacksServidor: public BLEServerCallbacks {
         dispositivoDesconectandose = true;
         if (estaActualizandoOTA()) {
             cancelarActualizacionOTA();
+            BLEDevice::setPower(ESP_PWR_LVL_N0);
         }
     }
 };
@@ -80,6 +81,7 @@ class CallbacksOTAControl: public BLECharacteristicCallbacks {
             size_t tamano = (size_t)atol(comando + 5);
             ultimoPorcentajeOTA = 0;
             if (iniciarActualizacionOTA(tamano)) {
+                BLEDevice::setPower(ESP_PWR_LVL_P9);
                 enviarEstadoOTABLE("READY");
             } else {
                 enviarEstadoOTABLE("ERR_BEGIN");
@@ -89,11 +91,13 @@ class CallbacksOTAControl: public BLECharacteristicCallbacks {
             if (finalizarActualizacionOTA()) {
                 enviarEstadoOTABLE("OK");
             } else {
+                BLEDevice::setPower(ESP_PWR_LVL_N0);
                 enviarEstadoOTABLE("ERR_END");
             }
         }
         else if (strncmp(comando, "ABORT", 5) == 0) {
             cancelarActualizacionOTA();
+            BLEDevice::setPower(ESP_PWR_LVL_N0);
             enviarEstadoOTABLE("ABORTED");
         }
     }
