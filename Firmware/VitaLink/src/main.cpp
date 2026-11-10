@@ -4,6 +4,7 @@
 #include "ota.h"
 #include "gestion_energia.h"
 #include "MAX30102.h"
+#include "deteccion_caidas.h"
 
 #define TIEMPO_MEDICION_MAX_MS  30000   // 30 segundos midiendo BPM y SpO2
 #define TIEMPO_DESCANSO_MAX_MS  120000  // 2 minutos dormido entre mediciones
@@ -137,6 +138,20 @@ void TaskMAX30102(void *pvParameters) {
     }
 }
 
+void TaskMPU6050(void *pvParameters) {
+    while (1) {
+        if (dispositivoConectado && !estaActualizandoOTA() && (pulseraEnMuneca || hayAlertaCaida())) {
+            if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+                detectarCaidas();
+                xSemaphoreGive(i2cMutex);
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(200));
+        }
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     
@@ -153,9 +168,10 @@ void setup() {
     // Inicializar lectura de bateria
     inicializarModulo();
 
-    // Inicializar sensor MAX30102 (queda dormido por defecto)
+    // Inicializar sensor MAX30102 y detector de caidas MPU6050
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
         inicializarSensorMAX();
+        inicializarDetector();
         xSemaphoreGive(i2cMutex);
     }
 
@@ -165,6 +181,7 @@ void setup() {
     // Crear tareas en sus respectivos nucleos
     xTaskCreatePinnedToCore(TaskBLE, "TareaBLE", 4096, NULL, 1, NULL, 0);
     xTaskCreatePinnedToCore(TaskMAX30102, "TareaMAX30102", 4096, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(TaskMPU6050, "TareaMPU6050", 4096, NULL, 1, NULL, 1);
 }
 
 void loop() {
