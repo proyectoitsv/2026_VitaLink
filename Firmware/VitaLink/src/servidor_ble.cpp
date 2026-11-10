@@ -127,6 +127,7 @@ void inicializarBLE() {
     }
 
     BLEDevice::init("VitaLink"); 
+    BLEDevice::setPower(ESP_PWR_LVL_N0); // Potencia 0 dBm para reducir consumo de bateria
     BLEDevice::setMTU(517);
     
     pServer = BLEDevice::createServer();

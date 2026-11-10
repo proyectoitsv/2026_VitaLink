@@ -162,6 +162,9 @@ void TaskMPU6050(void *pvParameters) {
 }
 
 void setup() {
+    // Reducir frecuencia del procesador de 240MHz a 80MHz para ahorrar bateria
+    setCpuFrequencyMhz(80);
+
     Serial.begin(115200);
     
     // Se inicia el I2C (SDA y SCL por defecto del XIAO ESP32 S3)
