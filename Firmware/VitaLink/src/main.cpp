@@ -56,7 +56,7 @@ void TaskMAX30102(void *pvParameters) {
             continue;
         }
 
-        // Modo dormido: destello infrarrojo de 15ms cada 1 segundo para detectar muñeca
+        // Modo dormido: destello infrarrojo cada 1 segundo para detectar muñeca
         if (estaSensorDormido()) {
             if (millis() - ultimoDestello >= 1000) {
                 ultimoDestello = millis();
@@ -102,8 +102,8 @@ void TaskMAX30102(void *pvParameters) {
                 xSemaphoreGive(i2cMutex);
             }
 
-            // Si despues de 500ms de despertar se detecta que se quito la pulsera, apagar al instante
-            if ((millis() - inicioMedicion > 500) && !siguePuesta) {
+            // Si despues de 1000ms de despertar se detecta que se quito la pulsera, apagar al instante
+            if ((millis() - inicioMedicion > 1000) && !siguePuesta) {
                 if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                     dormirSensorMAX();
                     xSemaphoreGive(i2cMutex);
@@ -120,8 +120,8 @@ void TaskMAX30102(void *pvParameters) {
             // Enviar lecturas por BLE cada 1 segundo mientras mide
             if (millis() - ultimoEnvioBLE >= 1000) {
                 ultimoEnvioBLE = millis();
-                if (bpm > 0) enviarLatidosBLE(bpm);
-                if (spo2 > 0) enviarOxigenoBLE(spo2);
+                enviarLatidosBLE(bpm > 0 ? bpm : 0);
+                enviarOxigenoBLE(spo2 > 0 ? spo2 : 0);
             }
 
             // Cumplidos los 30 segundos de medicion, volver a dormir por 2 minutos
