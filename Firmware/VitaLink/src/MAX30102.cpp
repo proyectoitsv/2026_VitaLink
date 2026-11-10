@@ -77,7 +77,10 @@ void dormirSensorMAX() {
     if (!sensorDormido) {
         sensor.setPulseAmplitudeRed(0);
         sensor.setPulseAmplitudeIR(0);
-        sensor.shutDown();
+        sensor.clearFIFO();
+        while (sensor.available()) {
+            sensor.nextSample();
+        }
         pulseraPuesta = false;
         resetearVariablesMAX();
         sensorDormido = true;
@@ -86,11 +89,13 @@ void dormirSensorMAX() {
 
 void despertarSensorMAX() {
     if (sensorDormido) {
-        sensor.wakeUp();
-        sensor.setFIFOAverage(16);
         sensor.setPulseAmplitudeIR(150);
         sensor.setPulseAmplitudeRed(0);
+        delay(170);
         sensor.clearFIFO();
+        while (sensor.available()) {
+            sensor.nextSample();
+        }
         pulseraPuesta = false;
         ultimoIR = 0;
         ultimoRed = 0;
@@ -105,30 +110,22 @@ bool verificarMunecaDestello() {
         return pulseraPuesta;
     }
 
-    // 1. Despertar en modo rápido (1 muestra sin promediar 16 veces = ~10ms)
-    sensor.wakeUp();
-    sensor.setFIFOAverage(1);
+    // 1. Encender el LED infrarrojo para el destello de detección
     sensor.setPulseAmplitudeRed(0);
     sensor.setPulseAmplitudeIR(150);
+
+    // 2. Esperar 170ms para que termine cualquier promedio previo con el LED apagado,
+    //    limpiar el FIFO de hardware y leer 1 muestra nueva directa con getIR()
+    delay(170);
     sensor.clearFIFO();
-
-    // 2. Esperar 15ms a que se complete el destello infrarrojo y conversión ADC
-    delay(15);
-
-    // 3. Leer la muestra obtenida
-    long lecturaIR = 0;
-    sensor.check();
+    uint32_t lecturaIR = sensor.getIR();
     while (sensor.available()) {
-        lecturaIR = sensor.getFIFOIR();
         sensor.nextSample();
     }
 
-    // 4. Volver a apagar inmediatamente el chip y los LEDs (Shutdown total)
+    // 3. Apagar inmediatamente los LEDs para ahorrar batería el resto del segundo
     sensor.setPulseAmplitudeIR(0);
     sensor.setPulseAmplitudeRed(0);
-    sensor.setFIFOAverage(16);
-    sensor.shutDown();
-    sensorDormido = true;
 
     pulseraPuesta = (lecturaIR > UMBRAL_PULSERA_PUESTA);
     return pulseraPuesta;
