@@ -2,15 +2,29 @@
 #include <Wire.h>
 #include "servidor_ble.h"
 #include "ota.h"
+#include "gestion_energia.h"
 
 const char* VERSION_FIRMWARE = "1.0.2";
 
 SemaphoreHandle_t i2cMutex;
 
 void TaskBLE(void *pvParameters) {
+    unsigned long ultimoEnvioBateria = 0;
+
     while (1) {
         manejarDesconexionBLE();
         manejarReinicioOTA();
+
+        if (dispositivoConectado && !estaActualizandoOTA()) {
+            if (millis() - ultimoEnvioBateria >= 5000) {
+                ultimoEnvioBateria = millis();
+                int bateria = llamarParaPorcentaje();
+                enviarBateriaBLE(bateria);
+            }
+        } else {
+            ultimoEnvioBateria = 0;
+        }
+
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -28,10 +42,13 @@ void setup() {
         while (1); // Detener sistema si falla el RTOS
     }
 
+    // Inicializar lectura de bateria
+    inicializarModulo();
+
     // Inicializar servidor Bluetooth y servicio OTA
     inicializarBLE();
 
-    // Crear tarea de Bluetooth y OTA en el Core 0
+    // Crear tarea de Bluetooth, OTA y Bateria en el Core 0
     xTaskCreatePinnedToCore(TaskBLE, "TareaBLE", 4096, NULL, 1, NULL, 0);
 }
 
