@@ -142,11 +142,20 @@ void TaskMPU6050(void *pvParameters) {
     while (1) {
         if (dispositivoConectado && !estaActualizandoOTA() && (pulseraEnMuneca || hayAlertaCaida())) {
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+                if (estaDetectorDormido()) {
+                    despertarDetector();
+                }
                 detectarCaidas();
                 xSemaphoreGive(i2cMutex);
             }
             vTaskDelay(pdMS_TO_TICKS(20));
         } else {
+            if (!estaDetectorDormido()) {
+                if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+                    dormirDetector();
+                    xSemaphoreGive(i2cMutex);
+                }
+            }
             vTaskDelay(pdMS_TO_TICKS(200));
         }
     }

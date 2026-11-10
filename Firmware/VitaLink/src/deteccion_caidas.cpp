@@ -5,10 +5,32 @@ static Adafruit_MPU6050 mpu;
 
 // Estado privado del módulo
 static bool mpu_iniciado = false;
+static bool detector_dormido = false;
 static bool posible_caida_libre = false;
 static unsigned long tiempo_caida_libre = 0;
 static bool estado_alarma = false;
 static unsigned long tiempo_inicio_alarma = 0;
+
+void dormirDetector() {
+  if (mpu_iniciado && !detector_dormido) {
+    mpu.enableSleep(true);
+    posible_caida_libre = false;
+    detector_dormido = true;
+  }
+}
+
+void despertarDetector() {
+  if (mpu_iniciado && detector_dormido) {
+    mpu.enableSleep(false);
+    mpu.setGyroStandby(true, true, true);
+    posible_caida_libre = false;
+    detector_dormido = false;
+  }
+}
+
+bool estaDetectorDormido() {
+  return detector_dormido;
+}
 
 void inicializarDetector() {
   if (!mpu.begin()) {
@@ -20,7 +42,15 @@ void inicializarDetector() {
   // Configuración original: Rango 4G y filtro de 21Hz
   mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+
+  // Apagar el giroscopio (no se usa para caídas: baja consumo de 3.9mA a 0.5mA)
+  mpu.setGyroStandby(true, true, true);
+
   mpu_iniciado = true;
+  detector_dormido = false;
+
+  // Arranca en modo sleep (5 uA) hasta que se conecte Bluetooth y haya muñeca
+  dormirDetector();
   Serial.println("Sensor MPU6050 inicializado (4G, 21Hz)");
 }
 
@@ -29,7 +59,7 @@ bool hayAlertaCaida() {
 }
 
 void detectarCaidas() {
-  if (!mpu_iniciado) return;
+  if (!mpu_iniciado || detector_dormido) return;
 
   unsigned long ahora = millis();
 

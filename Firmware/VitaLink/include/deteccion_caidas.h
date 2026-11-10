@@ -14,6 +14,9 @@ const unsigned long VENTANA_MAX_TIEMPO = 700;
 
 // API pública del módulo
 void inicializarDetector();
+void dormirDetector();
+void despertarDetector();
+bool estaDetectorDormido();
 void detectarCaidas();
 bool hayAlertaCaida();
 
