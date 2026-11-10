@@ -3,7 +3,12 @@
 
 #include <Arduino.h>
 
-bool inicializarSensorBPM();
+bool inicializarSensorMAX();
+void dormirSensorMAX();
+void despertarSensorMAX();
+bool verificarMunecaDestello();
+bool estaSensorDormido();
+bool hayPulseraPuesta();
 int procesarLatidosBPM();
 int procesarOxigenoSangre();
 

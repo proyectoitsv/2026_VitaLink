@@ -15,6 +15,7 @@
 
 static MAX30105 sensor;
 
+static bool sensorDormido = false;
 static bool pulseraPuesta = false;
 static unsigned long tiempoInicioToque = 0;
 
@@ -42,6 +43,8 @@ static long ultimoRed = 0;
 static unsigned long idMuestraGlobal = 0;
 
 static void actualizarLecturas() {
+    if (sensorDormido) return;
+
     sensor.check(); 
     
     // Se precesa todos los datos nuevos disponibles en la cola de la librería
@@ -53,7 +56,7 @@ static void actualizarLecturas() {
     }
 }
 
-static void resetearVariablesBPM() {
+static void resetearVariablesMAX() {
     picoMaximo = 0.0; 
     minimoLocal = 999999.0;
     bpmPromedio = 0;
@@ -70,7 +73,76 @@ static void resetearVariablesBPM() {
     tiempoInicioVentanaSpO2 = millis();
 }
 
-bool inicializarSensorBPM() {
+void dormirSensorMAX() {
+    if (!sensorDormido) {
+        sensor.setPulseAmplitudeRed(0);
+        sensor.setPulseAmplitudeIR(0);
+        sensor.shutDown();
+        pulseraPuesta = false;
+        resetearVariablesMAX();
+        sensorDormido = true;
+    }
+}
+
+void despertarSensorMAX() {
+    if (sensorDormido) {
+        sensor.wakeUp();
+        sensor.setFIFOAverage(16);
+        sensor.setPulseAmplitudeIR(150);
+        sensor.setPulseAmplitudeRed(0);
+        sensor.clearFIFO();
+        pulseraPuesta = false;
+        ultimoIR = 0;
+        ultimoRed = 0;
+        resetearVariablesMAX();
+        sensorDormido = false;
+    }
+}
+
+bool verificarMunecaDestello() {
+    // Si ya está despierto midiendo activamente, devolvemos el estado en curso
+    if (!sensorDormido) {
+        return pulseraPuesta;
+    }
+
+    // 1. Despertar en modo rápido (1 muestra sin promediar 16 veces = ~10ms)
+    sensor.wakeUp();
+    sensor.setFIFOAverage(1);
+    sensor.setPulseAmplitudeRed(0);
+    sensor.setPulseAmplitudeIR(150);
+    sensor.clearFIFO();
+
+    // 2. Esperar 15ms a que se complete el destello infrarrojo y conversión ADC
+    delay(15);
+
+    // 3. Leer la muestra obtenida
+    long lecturaIR = 0;
+    sensor.check();
+    while (sensor.available()) {
+        lecturaIR = sensor.getFIFOIR();
+        sensor.nextSample();
+    }
+
+    // 4. Volver a apagar inmediatamente el chip y los LEDs (Shutdown total)
+    sensor.setPulseAmplitudeIR(0);
+    sensor.setPulseAmplitudeRed(0);
+    sensor.setFIFOAverage(16);
+    sensor.shutDown();
+    sensorDormido = true;
+
+    pulseraPuesta = (lecturaIR > UMBRAL_PULSERA_PUESTA);
+    return pulseraPuesta;
+}
+
+bool estaSensorDormido() {
+    return sensorDormido;
+}
+
+bool hayPulseraPuesta() {
+    return pulseraPuesta;
+}
+
+bool inicializarSensorMAX() {
     // Se verifica la conexión I2C
     if (!sensor.begin(Wire, I2C_SPEED_STANDARD)) {
         return false;
@@ -82,11 +154,17 @@ bool inicializarSensorBPM() {
     sensor.setup(150, 16, 2, 100, 411, 16384); 
     sensor.setPulseAmplitudeRed(0); // Apagar luz roja visible inicialmente
     
-    resetearVariablesBPM();
+    sensorDormido = false;
+    resetearVariablesMAX();
+
+    // Arranca dormido por defecto hasta que el main lo despierte al conectar Bluetooth
+    dormirSensorMAX();
     return true;
 }
 
 int procesarLatidosBPM() {
+    if (sensorDormido) return 0;
+
     actualizarLecturas();
     
     static unsigned long ultimoIdBPM = 0;
@@ -109,7 +187,7 @@ int procesarLatidosBPM() {
                 if (millis() - tiempoDedoFuera > 500) { 
                     pulseraPuesta = false;
                     sensor.setPulseAmplitudeRed(0); // Apagar luz roja visible
-                    resetearVariablesBPM();
+                    resetearVariablesMAX();
                     tiempoDedoFuera = 0;
                 }
             }
@@ -122,7 +200,7 @@ int procesarLatidosBPM() {
             pulseraPuesta = true;
             sensor.setPulseAmplitudeRed(150); // Encender luz roja para SpO2
             tiempoInicioToque = millis();
-            resetearVariablesBPM();
+            resetearVariablesMAX();
         }
 
         if (millis() - tiempoInicioToque >= TIEMPO_ESTABILIZACION_MS) {
@@ -183,6 +261,8 @@ int procesarLatidosBPM() {
 }
 
 int procesarOxigenoSangre() {
+    if (sensorDormido) return 0;
+
     actualizarLecturas();
 
     static unsigned long ultimoIdSpO2 = 0;
