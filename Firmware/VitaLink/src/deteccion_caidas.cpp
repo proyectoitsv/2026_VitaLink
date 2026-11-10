@@ -9,16 +9,8 @@ static bool posible_caida_libre = false;
 static unsigned long tiempo_caida_libre = 0;
 static bool estado_alarma = false;
 static unsigned long tiempo_inicio_alarma = 0;
-static int estado_reposo_boton = HIGH;
 
 void inicializarDetector() {
-  pinMode(PIN_LED, OUTPUT);
-  digitalWrite(PIN_LED, LOW);
-
-  pinMode(PIN_BOTON, INPUT_PULLUP);
-  delay(10);
-  estado_reposo_boton = digitalRead(PIN_BOTON);
-
   if (!mpu.begin()) {
     Serial.println("Aviso: Sensor MPU6050 no detectado en el bus I2C");
     mpu_iniciado = false;
@@ -41,14 +33,10 @@ void detectarCaidas() {
 
   unsigned long ahora = millis();
 
-  // 1. MODO ALARMA ACTIVA (esperando reseteo del botón o timeout de 15s)
+  // 1. MODO ALARMA ACTIVA (se resetea automáticamente tras 15s para volver a vigilar)
   if (estado_alarma) {
-    bool botonPresionado = (ahora - tiempo_inicio_alarma > 400) && (digitalRead(PIN_BOTON) != estado_reposo_boton);
-    bool timeoutAlarma = (ahora - tiempo_inicio_alarma >= 15000);
-
-    if (botonPresionado || timeoutAlarma) {
+    if (ahora - tiempo_inicio_alarma >= 15000) {
       estado_alarma = false;
-      digitalWrite(PIN_LED, LOW);
       enviarAlertaCaidaBLE(false);
       Serial.println("[Caidas] Alarma reseteada");
     }
@@ -64,26 +52,30 @@ void detectarCaidas() {
   float z_g = a.acceleration.z / 9.81;
   float a_res = sqrt(pow(x_g, 2) + pow(y_g, 2) + pow(z_g, 2));
 
-  // FASE 1: detección de caída libre (ingravidez < 0.6g)
+  // FASE 1: detección de inicio de caída libre (ingravidez < 0.6g)
   if (a_res < UMBRAL_CAIDA_LIBRE) {
-    posible_caida_libre = true;
-    tiempo_caida_libre = ahora;
-  }
-
-  // FASE 2: detección de impacto (solo si hubo caída libre previa dentro de los 500ms)
-  if (posible_caida_libre && (ahora - tiempo_caida_libre < VENTANA_TIEMPO)) {
-    if (a_res > UMBRAL_IMPACTO) {
-      estado_alarma = true;
-      tiempo_inicio_alarma = ahora;
-      digitalWrite(PIN_LED, HIGH);
-      enviarAlertaCaidaBLE(true);
-      Serial.printf("[Caidas] !!! CAIDA DETECTADA (%.2fg) - ALARMA ACTIVADA !!!\n", a_res);
-      posible_caida_libre = false;
+    if (!posible_caida_libre) {
+      posible_caida_libre = true;
+      tiempo_caida_libre = ahora;
     }
   }
 
-  // Cancelar si pasó demasiado tiempo
-  if (posible_caida_libre && (ahora - tiempo_caida_libre > VENTANA_TIEMPO)) {
-    posible_caida_libre = false;
+  // FASE 2: detección de impacto dentro de la ventana real [250ms, 700ms]
+  if (posible_caida_libre) {
+    unsigned long tiempoTranscurrido = ahora - tiempo_caida_libre;
+
+    if (a_res > UMBRAL_IMPACTO) {
+      if (tiempoTranscurrido >= VENTANA_MIN_TIEMPO && tiempoTranscurrido <= VENTANA_MAX_TIEMPO) {
+        estado_alarma = true;
+        tiempo_inicio_alarma = ahora;
+        enviarAlertaCaidaBLE(true);
+        Serial.printf("[Caidas] !!! CAIDA DETECTADA (%.2fg en %lums) - ALARMA ACTIVADA !!!\n", a_res, tiempoTranscurrido);
+      }
+      // Si el golpe ocurrió antes del tiempo mínimo (sacudida rápida de muñeca), se descarta
+      posible_caida_libre = false;
+    } else if (tiempoTranscurrido > VENTANA_MAX_TIEMPO) {
+      // Cancelar si pasó el tiempo máximo sin impacto
+      posible_caida_libre = false;
+    }
   }
 }
