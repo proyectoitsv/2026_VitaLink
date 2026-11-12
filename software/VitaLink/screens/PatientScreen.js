@@ -285,32 +285,7 @@ export default function PatientScreen({ navigation }) {
     if (isConnectedRef.current || isConnectingRef.current) return;
     try {
       await requestPermissions();
-
-      // 1. ¿Está ya conectada en la pila BLE de Android? (Caso típico al reabrir la app)
-      const connectedList = await bleManager.connectedDevices([VITALINK_SERVICE_UUID]);
-      if (connectedList && connectedList.length > 0) {
-        console.log('✅ Pulsera ya enlazada en el sistema:', connectedList[0].id);
-        await connectToDevice(connectedList[0]);
-        return;
-      }
-
-      // 2. ¿Tenemos el ID guardado de la pulsera?
-      const savedId = lastKnownDeviceIdRef.current;
-      if (savedId) {
-        try {
-          const isConn = await bleManager.isDeviceConnected(savedId);
-          if (isConn) {
-            const devs = await bleManager.devices([savedId]);
-            if (devs && devs.length > 0) {
-              console.log('✅ Conectando directamente por ID conocido:', devs[0].id);
-              await connectToDevice(devs[0]);
-              return;
-            }
-          }
-        } catch (e) {}
-      }
-
-      // 3. Si no está en el sistema, buscarla en segundo plano
+      // Buscar siempre señal real en el aire para evitar sesiones GATT fantasmas de Android
       startScan(false);
     } catch (err) {
       console.warn('Error en auto-reconexión BLE:', err);
@@ -326,13 +301,16 @@ export default function PatientScreen({ navigation }) {
       setIsScanning(true);
     }
 
-    // Comprobar si ya está conectada antes de escanear
+    // Limpiar posibles conexiones GATT fantasma en caché de Android antes de escanear
     try {
-      const connectedList = await bleManager.connectedDevices([VITALINK_SERVICE_UUID]);
-      if (connectedList && connectedList.length > 0) {
-        setIsScanning(false);
-        await connectToDevice(connectedList[0]);
-        return;
+      const staleList = await bleManager.connectedDevices([VITALINK_SERVICE_UUID]);
+      if (staleList && staleList.length > 0) {
+        for (const staleDev of staleList) {
+          await bleManager.cancelDeviceConnection(staleDev.id).catch(() => {});
+        }
+      }
+      if (lastKnownDeviceIdRef.current) {
+        await bleManager.cancelDeviceConnection(lastKnownDeviceIdRef.current).catch(() => {});
       }
     } catch (e) {}
 
@@ -360,13 +338,10 @@ export default function PatientScreen({ navigation }) {
       }
       if (!scannedDevice || isConnectedRef.current || isConnectingRef.current) return;
 
-      const name = scannedDevice.name || scannedDevice.localName || '';
+      const name = (scannedDevice.name || scannedDevice.localName || '').trim();
       const isVitaLinkName = name.toLowerCase().includes('vitalink');
-      const isVitaLinkService = scannedDevice.serviceUUIDs && 
-        scannedDevice.serviceUUIDs.some(u => u.toLowerCase() === VITALINK_SERVICE_UUID.toLowerCase());
-      const isSavedMac = lastKnownDeviceIdRef.current && scannedDevice.id === lastKnownDeviceIdRef.current;
 
-      if (isVitaLinkName || isVitaLinkService || isSavedMac) {
+      if (isVitaLinkName) {
         console.log('🎯 Pulsera VitaLink detectada en escaneo:', scannedDevice.id, name);
         if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
         bleManager.stopDeviceScan();
@@ -421,12 +396,10 @@ export default function PatientScreen({ navigation }) {
       autoReconnectTimerRef.current = null;
     }
     try {
-      // Si el dispositivo ya está conectado al OS, usar la conexión o conectar limpiando caché GATT
-      const isAlready = await scannedDevice.isConnected().catch(() => false);
-      let activeDevice = scannedDevice;
-      if (!isAlready) {
-        activeDevice = await scannedDevice.connect({ refreshGatt: 'OnConnected' });
-      }
+      // Cerrar cualquier sesión GATT fantasma previa y conectar de cero limpiando caché
+      await bleManager.cancelDeviceConnection(scannedDevice.id).catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 250));
+      let activeDevice = await scannedDevice.connect({ refreshGatt: 'OnConnected', timeout: 6000 });
       setDevice(activeDevice);
       deviceRef.current = activeDevice;
       lastKnownDeviceIdRef.current = activeDevice.id;
@@ -479,7 +452,10 @@ export default function PatientScreen({ navigation }) {
         return false;
       };
 
-      await tryReadFirmwareVersion(activeDevice);
+      const versionOk = await tryReadFirmwareVersion(activeDevice);
+      if (!versionOk) {
+        throw new Error('Dispositivo incompatible o sin respuesta real de VitaLink');
+      }
 
       isConnectedRef.current = true;
       isConnectingRef.current = false;
@@ -597,6 +573,9 @@ export default function PatientScreen({ navigation }) {
 
     } catch (e) {
       console.warn('Error connectToDevice:', e);
+      if (scannedDevice?.id) {
+        bleManager.cancelDeviceConnection(scannedDevice.id).catch(() => {});
+      }
       isConnectingRef.current = false;
       setIsConnecting(false);
       handleDisconnection(true);
