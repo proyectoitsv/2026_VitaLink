@@ -61,6 +61,8 @@ export default function PatientScreen({ navigation }) {
   const userExplicitlyDisconnectedRef = useRef(false);
   const isUpdatingOtaRef = useRef(false);
   const otaControlSubRef = useRef(null);
+  const activeAlertDocRef = useRef(null);
+  const alertResetTimerRef = useRef(null);
 
   useEffect(() => {
     userRef.current = user;
@@ -293,13 +295,23 @@ export default function PatientScreen({ navigation }) {
   };
 
   const startScan = async (isUserInitiated = false) => {
-    if (isConnectedRef.current || isConnectingRef.current) return;
+    if (isConnectedRef.current) return;
+    if (isConnectingRef.current && !isUserInitiated) return;
+    if (isUserInitiated && isConnectingRef.current) {
+      isConnectingRef.current = false;
+      setIsConnecting(false);
+    }
     await requestPermissions();
     if (isUserInitiated) {
       userExplicitlyDisconnectedRef.current = false;
       setDisconnectNotice(false);
       setIsScanning(true);
     }
+
+    // Detener cualquier escaneo anterior
+    try {
+      bleManager.stopDeviceScan();
+    } catch (e) {}
 
     // Limpiar posibles conexiones GATT fantasma en caché de Android antes de escanear
     try {
@@ -308,29 +320,23 @@ export default function PatientScreen({ navigation }) {
         for (const staleDev of staleList) {
           await bleManager.cancelDeviceConnection(staleDev.id).catch(() => {});
         }
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
-      if (lastKnownDeviceIdRef.current) {
-        await bleManager.cancelDeviceConnection(lastKnownDeviceIdRef.current).catch(() => {});
-      }
-    } catch (e) {}
-
-    // Detener cualquier escaneo anterior
-    try {
-      bleManager.stopDeviceScan();
     } catch (e) {}
 
     if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
     scanTimeoutRef.current = setTimeout(() => {
-      bleManager.stopDeviceScan();
+      try { bleManager.stopDeviceScan(); } catch (e) {}
       setIsScanning(false);
       if (!isUserInitiated && !isConnectedRef.current && !isConnectingRef.current && !userExplicitlyDisconnectedRef.current && lastKnownDeviceIdRef.current) {
         autoReconnectTimerRef.current = setTimeout(() => {
           if (!isConnectedRef.current && !isConnectingRef.current) checkAndAutoConnect();
-        }, 8000);
+        }, 6000);
       }
     }, isUserInitiated ? 15000 : 8000);
 
-    bleManager.startDeviceScan(null, { allowDuplicates: false }, (error, scannedDevice) => {
+    // allowDuplicates: true y scanMode: 2 (LowLatency) para no perder el paquete SCAN_RSP con el nombre 'VitaLink'
+    bleManager.startDeviceScan(null, { allowDuplicates: true, scanMode: 2 }, (error, scannedDevice) => {
       if (error) {
         console.warn('Error escaneo BLE:', error);
         setIsScanning(false);
@@ -339,12 +345,15 @@ export default function PatientScreen({ navigation }) {
       if (!scannedDevice || isConnectedRef.current || isConnectingRef.current) return;
 
       const name = (scannedDevice.name || scannedDevice.localName || '').trim();
-      const isVitaLinkName = name.toLowerCase().includes('vitalink');
+      const lowerName = name.toLowerCase();
+      const isVitaLinkName = lowerName.includes('vitalink');
+      const isForeignName = lowerName.length > 0 && !isVitaLinkName;
+      const isSavedMac = lastKnownDeviceIdRef.current && scannedDevice.id === lastKnownDeviceIdRef.current;
 
-      if (isVitaLinkName) {
-        console.log('🎯 Pulsera VitaLink detectada en escaneo:', scannedDevice.id, name);
+      if (isVitaLinkName || (isSavedMac && !isForeignName)) {
+        console.log('🎯 Pulsera VitaLink detectada en escaneo:', scannedDevice.id, name || '(MAC guardada)');
         if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-        bleManager.stopDeviceScan();
+        try { bleManager.stopDeviceScan(); } catch (e) {}
         setIsScanning(false);
         connectToDevice(scannedDevice);
       }
@@ -396,21 +405,34 @@ export default function PatientScreen({ navigation }) {
       autoReconnectTimerRef.current = null;
     }
     try {
-      // Cerrar cualquier sesión GATT fantasma previa y conectar de cero limpiando caché
-      await bleManager.cancelDeviceConnection(scannedDevice.id).catch(() => {});
-      await new Promise(resolve => setTimeout(resolve, 250));
-      let activeDevice = await scannedDevice.connect({ refreshGatt: 'OnConnected', timeout: 6000 });
+      let activeDevice = null;
+      let lastConnectErr = null;
+
+      // Reintento automático ante errores transitorios GATT 133 de Android
+      for (let connAttempt = 0; connAttempt < 2; connAttempt++) {
+        try {
+          const alreadyConn = await bleManager.isDeviceConnected(scannedDevice.id).catch(() => false);
+          if (alreadyConn || connAttempt > 0) {
+            await bleManager.cancelDeviceConnection(scannedDevice.id).catch(() => {});
+            await new Promise(resolve => setTimeout(resolve, 450));
+          }
+          activeDevice = await bleManager.connectToDevice(scannedDevice.id, {
+            refreshGatt: 'OnConnected',
+            timeout: 8000
+          });
+          if (activeDevice) break;
+        } catch (connErr) {
+          lastConnectErr = connErr;
+          console.log(`Intento ${connAttempt + 1} de conexión BLE falló:`, connErr.message);
+        }
+      }
+
+      if (!activeDevice) {
+        throw lastConnectErr || new Error('No se pudo establecer enlace BLE con la pulsera');
+      }
+
       setDevice(activeDevice);
       deviceRef.current = activeDevice;
-      lastKnownDeviceIdRef.current = activeDevice.id;
-
-      // Guardar el ID de la pulsera en Firestore para que el paciente la recuerde siempre
-      if (userRef.current) {
-        setDoc(doc(db, 'pacientes', userRef.current.uid.substring(0, 8)), {
-          pulseraBleId: activeDevice.id,
-          pulseraNombre: activeDevice.name || 'VitaLink'
-        }, { merge: true }).catch(() => {});
-      }
 
       // Listener para detectar desconexión si la pulsera se apaga
       activeDevice.onDisconnected((error, disconnectedDev) => {
@@ -418,7 +440,7 @@ export default function PatientScreen({ navigation }) {
         handleDisconnection(true);
       });
       
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => setTimeout(resolve, 500));
       await activeDevice.discoverAllServicesAndCharacteristics();
 
       // Negociar MTU máximo para permitir bloques grandes en OTA
@@ -434,7 +456,7 @@ export default function PatientScreen({ navigation }) {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
             if (attempt > 0) {
-              await new Promise(resolve => setTimeout(resolve, 450));
+              await new Promise(resolve => setTimeout(resolve, 400));
               await dev.discoverAllServicesAndCharacteristics();
             }
             const versionChar = await dev.readCharacteristicForService(VITALINK_SERVICE_UUID, OTA_VERSION_CHAR_UUID);
@@ -454,7 +476,24 @@ export default function PatientScreen({ navigation }) {
 
       const versionOk = await tryReadFirmwareVersion(activeDevice);
       if (!versionOk) {
-        throw new Error('Dispositivo incompatible o sin respuesta real de VitaLink');
+        // Verificar mediante RSSI en vivo que la conexión sea real y no caché fantasma
+        const rssiDev = await Promise.race([
+          activeDevice.readRSSI(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('RSSI_TIMEOUT')), 2500))
+        ]);
+        if (!rssiDev) {
+          throw new Error('Sin respuesta real de la pulsera VitaLink');
+        }
+      }
+
+      lastKnownDeviceIdRef.current = activeDevice.id;
+
+      // Guardar el ID de la pulsera en Firestore para que el paciente la recuerde siempre
+      if (userRef.current) {
+        setDoc(doc(db, 'pacientes', userRef.current.uid.substring(0, 8)), {
+          pulseraBleId: activeDevice.id,
+          pulseraNombre: activeDevice.name || 'VitaLink'
+        }, { merge: true }).catch(() => {});
       }
 
       isConnectedRef.current = true;
@@ -535,19 +574,43 @@ export default function PatientScreen({ navigation }) {
       });
       subscriptionsRef.current.push(subBat);
 
+      const deactivateCurrentAlert = () => {
+        if (alertResetTimerRef.current) {
+          clearTimeout(alertResetTimerRef.current);
+          alertResetTimerRef.current = null;
+        }
+        if (activeAlertDocRef.current) {
+          const docToClose = activeAlertDocRef.current;
+          activeAlertDocRef.current = null;
+          setDoc(docToClose, { activa: false }, { merge: true }).catch(() => {});
+        }
+      };
+
       const subCaida = bleManager.monitorCharacteristicForDevice(activeDevice.id, VITALINK_SERVICE_UUID, CAIDA_CHAR_UUID, (error, characteristic) => {
         if (error) return;
         if (characteristic?.value) {
           lastDataTimestampRef.current = Date.now();
-          const val = decodeBase64(characteristic.value);
+          const val = decodeBase64(characteristic.value).trim();
           setAlertaCaida(val);
           datosRef.current.alertaCaida = val;
           if (val === '1' && userRef.current) {
+            if (alertResetTimerRef.current) clearTimeout(alertResetTimerRef.current);
             addDoc(collection(db, 'pacientes', userRef.current.uid.substring(0, 8), 'alertas_criticas'), { 
               tipo: 'CAIDA', 
+              activa: true,
               timestamp: serverTimestamp(), 
               ubicacion: locationRef.current ? { latitude: locationRef.current.latitude, longitude: locationRef.current.longitude } : null 
-            });
+            }).then((docRef) => {
+              activeAlertDocRef.current = docRef;
+            }).catch(() => {});
+
+            alertResetTimerRef.current = setTimeout(() => {
+              setAlertaCaida('0');
+              datosRef.current.alertaCaida = '0';
+              deactivateCurrentAlert();
+            }, 15000);
+          } else if (val === '0') {
+            deactivateCurrentAlert();
           }
         }
       });
@@ -557,15 +620,27 @@ export default function PatientScreen({ navigation }) {
         if (error) return;
         if (characteristic?.value) {
           lastDataTimestampRef.current = Date.now();
-          const val = decodeBase64(characteristic.value);
+          const val = decodeBase64(characteristic.value).trim();
           setAlertaSOS(val);
           datosRef.current.alertaSOS = val;
           if (val === '1' && userRef.current) {
+            if (alertResetTimerRef.current) clearTimeout(alertResetTimerRef.current);
             addDoc(collection(db, 'pacientes', userRef.current.uid.substring(0, 8), 'alertas_criticas'), { 
               tipo: 'SOS', 
+              activa: true,
               timestamp: serverTimestamp(), 
               ubicacion: locationRef.current ? { latitude: locationRef.current.latitude, longitude: locationRef.current.longitude } : null 
-            });
+            }).then((docRef) => {
+              activeAlertDocRef.current = docRef;
+            }).catch(() => {});
+
+            alertResetTimerRef.current = setTimeout(() => {
+              setAlertaSOS('0');
+              datosRef.current.alertaSOS = '0';
+              deactivateCurrentAlert();
+            }, 15000);
+          } else if (val === '0') {
+            deactivateCurrentAlert();
           }
         }
       });

@@ -56,12 +56,41 @@ export default function FamilyDashboardScreen({ navigation, route }) {
       }
     });
 
+    let alertExpiryTimer = null;
     const qAlertas = query(collection(db, 'pacientes', patientId, 'alertas_criticas'), orderBy('timestamp', 'desc'), limit(1));
     const unsubAlertas = onSnapshot(qAlertas, (snapshot) => {
-      if (!snapshot.empty) setAlerta(snapshot.docs[0].data());
+      if (alertExpiryTimer) {
+        clearTimeout(alertExpiryTimer);
+        alertExpiryTimer = null;
+      }
+      if (snapshot.empty) {
+        setAlerta(null);
+        return;
+      }
+      const al = snapshot.docs[0].data();
+      if (al.activa === false) {
+        setAlerta(null);
+        return;
+      }
+      const tsMillis = al.timestamp?.toMillis ? al.timestamp.toMillis() : Date.now();
+      const elapsed = Math.max(0, Date.now() - tsMillis);
+      if (elapsed >= 15000) {
+        setAlerta(null);
+        return;
+      }
+      setAlerta(al);
+      alertExpiryTimer = setTimeout(() => {
+        setAlerta(null);
+      }, 15000 - elapsed);
     });
 
-    return () => { unsubPaciente(); unsubSignos(); unsubAlertas(); unsubFallback(); };
+    return () => {
+      if (alertExpiryTimer) clearTimeout(alertExpiryTimer);
+      unsubPaciente();
+      unsubSignos();
+      unsubAlertas();
+      unsubFallback();
+    };
   }, [patientId]);
 
   const firstName = patientData?.nombre ? patientData.nombre.trim().split(' ')[0] : '';

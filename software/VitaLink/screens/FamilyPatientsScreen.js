@@ -166,15 +166,40 @@ function PatientListItem({ item, db, onPress, onRemove }) {
       if (docSnap.exists()) setVitals(docSnap.data());
     });
 
+    let alertExpiryTimer = null;
     const qAlertas = query(collection(db, 'pacientes', patientId, 'alertas_criticas'), orderBy('timestamp', 'desc'), limit(1));
     const unsubAlertas = onSnapshot(qAlertas, (snap) => {
-      if (!snap.empty) {
-        const al = snap.docs[0].data();
-        setAlerta(al);
+      if (alertExpiryTimer) {
+        clearTimeout(alertExpiryTimer);
+        alertExpiryTimer = null;
       }
+      if (snap.empty) {
+        setAlerta(null);
+        return;
+      }
+      const al = snap.docs[0].data();
+      if (al.activa === false) {
+        setAlerta(null);
+        return;
+      }
+      const tsMillis = al.timestamp?.toMillis ? al.timestamp.toMillis() : Date.now();
+      const elapsed = Math.max(0, Date.now() - tsMillis);
+      if (elapsed >= 15000) {
+        setAlerta(null);
+        return;
+      }
+      setAlerta(al);
+      alertExpiryTimer = setTimeout(() => {
+        setAlerta(null);
+      }, 15000 - elapsed);
     });
 
-    return () => { unsubDoc(); unsubVitals(); unsubAlertas(); };
+    return () => {
+      if (alertExpiryTimer) clearTimeout(alertExpiryTimer);
+      unsubDoc();
+      unsubVitals();
+      unsubAlertas();
+    };
   }, [patientId]);
 
   const nombreCompleto = patientData 
