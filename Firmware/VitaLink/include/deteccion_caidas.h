@@ -22,5 +22,21 @@ void despertarDetector();
 bool estaDetectorDormido();
 void detectarCaidas();
 bool hayAlertaCaida();
+void cancelarAlarmaCaida();
+bool alarmaVibrando();          // true mientras haya un aviso en curso
+void detenerVibracionAlarma();  // Un familiar vio la alerta: los pulsos se espacian (no se cortan)
+bool avisoVisto();              // true si un familiar ya vio el aviso en curso
+void marcarAvisoActivo();       // Se envio un S.O.S.: hay un aviso en curso
+bool hayAvisoActivo();          // Hay una caida o un S.O.S. sin cerrar
+bool esperarMuestraMPU(uint32_t timeoutMs);   // Espera la interrupcion de muestra nueva (o el tiempo maximo)
+float obtenerNivelMovimiento();               // Movimiento de la muñeca en g (promedio de |a - 1g|)
+
+// Calibracion
+ConfigCaidas obtenerConfigCaidas();
+void aplicarConfigCaidas(const ConfigCaidas &c);  // Aplica al instante (con limites de seguridad)
+void guardarConfigCaidas();                       // Guarda en la memoria permanente
+void restaurarConfigCaidas();                     // Vuelve a los valores de fabrica
+void activarModoCalibracion(bool activo);         // Modo prueba: grafica y no dispara alertas reales
+bool enModoCalibracion();
 
 #endif // DETECCION_CAIDAS_H

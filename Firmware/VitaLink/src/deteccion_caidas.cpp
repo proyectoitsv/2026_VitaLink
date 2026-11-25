@@ -331,12 +331,60 @@ bool hayAlertaCaida() {
   return estado_alarma;
 }
 
-void detectarCaidas() {
-  if (!mpu_iniciado || detector_dormido) return;
+static void activarAlarmaCaida(unsigned long ahora, float a_res) {
+  estado_alarma = true;
+  tiempo_inicio_alarma = ahora;
+  confirmando_caida = false;
+  posible_caida_libre = false;
+  posible_impacto_previo = false;
+  aviso_visto = false;
+  aviso_activo = true;
+  inicio_aviso = ahora;
+  enviarAlertaCaidaBLE(true);
+}
 
+bool alarmaVibrando() {
+  return hayAvisoActivo();
+}
+
+bool avisoVisto() {
+  return aviso_visto;
+}
+
+void marcarAvisoActivo() {
+  aviso_activo = true;
+  aviso_visto = false;
+  inicio_aviso = millis();
+}
+
+bool hayAvisoActivo() {
+  if ((aviso_activo || estado_alarma) && millis() - inicio_aviso >= AVISO_MAX_MS) {
+    aviso_activo = false;
+    estado_alarma = false;
+    aviso_visto = false;
+  }
+  return aviso_activo || estado_alarma;
+}
+
+void detenerVibracionAlarma() {
+  aviso_visto = true;
+}
+
+void detectarCaidas() {
   unsigned long ahora = millis();
 
-  // 1. MODO ALARMA ACTIVA (se resetea automáticamente tras 15s para volver a vigilar)
+  // Si no se detecto al inicio, reintentar cada 1 segundo sin bloquear el sistema
+  if (!mpu_iniciado) {
+    if (ahora - ultimo_intento_init >= 1000) {
+      ultimo_intento_init = ahora;
+      inicializarDetector();
+    }
+    return;
+  }
+
+  if (detector_dormido) return;
+
+  // 1. MODO ALARMA ACTIVA (se resetea automaticamente tras 15s para volver a vigilar)
   if (estado_alarma) {
     if (ahora - tiempo_inicio_alarma >= 15000) {
       estado_alarma = false;
