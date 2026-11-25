@@ -4,6 +4,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
 import { getAuth } from '@react-native-firebase/auth';
 import { getFirestore, doc, getDoc } from '@react-native-firebase/firestore';
+import { PulseRings } from '../components/SensingVisuals';
+import { colors } from '../constants/theme';
 
 export default function RoleSelectionScreen({ navigation }) {
   const [checkingPatient, setCheckingPatient] = React.useState(false);
@@ -45,12 +47,10 @@ export default function RoleSelectionScreen({ navigation }) {
 
       {/* Encabezado */}
       <View style={styles.header}>
-        <View style={styles.logoCircle}>
-          <Animatable.View animation="pulse" easing="ease-out" iterationCount="infinite" duration={1800}>
-            <MaterialCommunityIcons name="heart-pulse" size={52} color="#E04644" />
-          </Animatable.View>
-        </View>
-        <Text style={styles.title}>VitaLink</Text>
+        <Animatable.View animation="zoomIn" duration={600}>
+          <PulseRings active color={colors.heart} icon="heart-pulse" size={84} iconSize={46} beatMs={1100} />
+        </Animatable.View>
+        <Animatable.Text animation="fadeInUp" delay={150} style={styles.title}>VitaLink</Animatable.Text>
         <Text style={styles.subtitle}>Elegí cómo vas a usar la aplicación hoy</Text>
       </View>
 
@@ -99,6 +99,11 @@ export default function RoleSelectionScreen({ navigation }) {
           </TouchableOpacity>
         </Animatable.View>
       </View>
+
+      <Animatable.View animation="fadeIn" delay={400} style={styles.footer}>
+        <MaterialCommunityIcons name="shield-lock-outline" size={14} color={colors.textFaint} style={{ marginRight: 6 }} />
+        <Text style={styles.footerText}>Monitoreo de signos vitales y detección de caídas</Text>
+      </Animatable.View>
     </View>
   );
 }
@@ -106,26 +111,42 @@ export default function RoleSelectionScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0D10',
-    paddingTop: 58,
+    backgroundColor: colors.bg,
+    justifyContent: 'center',
+    paddingBottom: 30,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: 30,
     paddingHorizontal: 24,
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 28,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerText: {
+    color: colors.textFaint,
+    fontSize: 12,
+    fontWeight: '600',
   },
   logoCircle: {
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: '#22252A',
+    backgroundColor: '#17191E',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
   },
   title: {
-    fontSize: 36,
-    fontWeight: '800',
+    fontSize: 38,
+    fontWeight: '900',
+    marginTop: 4,
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
@@ -143,7 +164,7 @@ const styles = StyleSheet.create({
   cardButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#22252A',
+    backgroundColor: '#17191E',
     paddingVertical: 22,
     paddingHorizontal: 18,
     borderRadius: 22,

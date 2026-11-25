@@ -28,3 +28,6 @@ Thumbs.db
 # Firebase
 firebase-debug.log
 .firebase/
+
+# APK de prueba del modo demo
+demo-build/

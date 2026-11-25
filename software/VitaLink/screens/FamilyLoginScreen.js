@@ -22,7 +22,17 @@ export default function FamilyLoginScreen({ navigation, route }) {
   const [selectedVinculo, setSelectedVinculo] = useState('Papá');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [nombreFamiliar, setNombreFamiliar] = useState('');
   const auth = getAuth();
+
+  // Recordar el nombre que el familiar ya cargó antes
+  useEffect(() => {
+    const u = auth.currentUser;
+    if (!u) return;
+    getDoc(doc(getFirestore(), 'familiares', u.uid.substring(0, 8)))
+      .then((snap) => { if (snap.exists() && snap.data().nombre) setNombreFamiliar(snap.data().nombre); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     signInAnonymously(auth);
@@ -58,6 +68,10 @@ export default function FamilyLoginScreen({ navigation, route }) {
             foto: patientData.foto || null,
             agregadoEn: serverTimestamp()
           }, { merge: true });
+
+          if (nombreFamiliar.trim()) {
+            await setDoc(doc(db, 'familiares', familyUid), { nombre: nombreFamiliar.trim() }, { merge: true });
+          }
 
           await setDoc(doc(db, 'pacientes', cleanId), {
             familiarVinculado: true,
@@ -151,7 +165,23 @@ export default function FamilyLoginScreen({ navigation, route }) {
                 );
               })}
             </View>
-            
+
+            {/* Nombre del familiar: el paciente lo ve cuando abrís una alerta */}
+            <Text style={styles.label}>TU NOMBRE (OPCIONAL)</Text>
+            <View style={styles.inputContainer}>
+              <MaterialCommunityIcons name="account-outline" size={22} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={[styles.input, { letterSpacing: 0, fontSize: 16 }]}
+                placeholder="Ej: Juan"
+                placeholderTextColor="#6B7280"
+                value={nombreFamiliar}
+                onChangeText={setNombreFamiliar}
+                autoCapitalize="words"
+                maxLength={24}
+              />
+            </View>
+            <Text style={styles.helperText}>Si hay una emergencia, el paciente verá tu nombre cuando abras la alerta.</Text>
+
             {error ? (
               <Animatable.View animation="shake" style={styles.errorBox}>
                 <MaterialCommunityIcons name="alert-circle" size={16} color="#E04644" />
@@ -183,28 +213,29 @@ const styles = StyleSheet.create({
   keyboardView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40, paddingTop: 42 },
   topNav: { marginBottom: 6 },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#17191E', justifyContent: 'center', alignItems: 'center' },
 
   header: { alignItems: 'center', marginBottom: 24 },
-  iconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#22252A', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  iconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#17191E', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   categoryLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 4 },
   title: { fontSize: 25, fontWeight: '700', color: '#FFFFFF', marginBottom: 6 },
   subtitle: { fontSize: 14, color: '#9CA3AF', textAlign: 'center', lineHeight: 20, paddingHorizontal: 12 },
 
-  formCard: { backgroundColor: '#22252A', borderRadius: 22, padding: 20 },
+  formCard: { backgroundColor: '#17191E', borderRadius: 22, padding: 20 },
   label: { fontSize: 11, fontWeight: '700', color: '#D4A359', marginBottom: 10, letterSpacing: 0.6 },
   
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', borderRadius: 16, marginBottom: 12 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F1114', borderRadius: 16, marginBottom: 12 },
   inputIcon: { paddingLeft: 14 },
   input: { flex: 1, fontSize: 18, color: '#FFFFFF', fontWeight: '600', paddingVertical: 14, paddingHorizontal: 10, letterSpacing: 1 },
   
-  qrButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#181A1F', borderRadius: 16, paddingVertical: 14, marginBottom: 20 },
+  qrButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F1114', borderRadius: 16, paddingVertical: 14, marginBottom: 20 },
   qrButtonText: { color: '#E5E7EB', fontSize: 14, fontWeight: '600', marginLeft: 8 },
 
+  helperText: { color: '#6B7280', fontSize: 12, fontWeight: '500', marginTop: -4, marginBottom: 16, lineHeight: 17 },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: 18 },
 
   vinculosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
-  vinculoPill: { backgroundColor: '#181A1F', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14 },
+  vinculoPill: { backgroundColor: '#0F1114', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14 },
   vinculoPillSelected: { backgroundColor: '#43C667' },
   vinculoPillText: { color: '#9CA3AF', fontSize: 13, fontWeight: '600' },
   vinculoPillTextSelected: { color: '#FFFFFF', fontWeight: '700' },
@@ -213,6 +244,6 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', padding: 12, borderRadius: 12, marginBottom: 14 },
+  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F1114', padding: 12, borderRadius: 12, marginBottom: 14 },
   errorText: { color: '#E04644', fontSize: 13, fontWeight: '600', marginLeft: 8, flex: 1 }
 });

@@ -337,7 +337,7 @@ export default function PatientOnboardingScreen({ navigation }) {
                               key={av.id} 
                               style={[
                                 styles.avatarItem, 
-                                isSelected && { borderColor: '#43C667', backgroundColor: '#181A1F' }
+                                isSelected && { borderColor: '#43C667', backgroundColor: '#0F1114' }
                               ]} 
                               onPress={() => {
                                 setSelectedAvatar(av.id);
@@ -501,9 +501,9 @@ const styles = StyleSheet.create({
 
   // Top Bar
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 12 },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#17191E', justifyContent: 'center', alignItems: 'center' },
   stepsPillContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  stepDot: { width: 20, height: 6, borderRadius: 3, backgroundColor: '#22252A' },
+  stepDot: { width: 20, height: 6, borderRadius: 3, backgroundColor: '#17191E' },
   stepDotActive: { width: 32, backgroundColor: '#E04644' },
   stepDotCompleted: { backgroundColor: '#43C667' },
   stepCounterWrapper: { width: 44, alignItems: 'flex-end' },
@@ -516,15 +516,15 @@ const styles = StyleSheet.create({
 
   // Step Header
   stepHeader: { alignItems: 'center', marginTop: 4, marginBottom: 16 },
-  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  iconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#17191E', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   categoryLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 4 },
   title: { color: '#FFF', fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 6 },
   subtitle: { color: '#9CA3AF', fontSize: 13.5, textAlign: 'center', lineHeight: 19, paddingHorizontal: 12 },
 
   // Card Box & Form Elements
-  cardBox: { backgroundColor: '#22252A', borderRadius: 22, padding: 20 },
+  cardBox: { backgroundColor: '#17191E', borderRadius: 22, padding: 20 },
   label: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 6 },
-  input: { backgroundColor: '#181A1F', color: '#FFF', fontSize: 16, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginBottom: 14 },
+  input: { backgroundColor: '#0F1114', color: '#FFF', fontSize: 16, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginBottom: 14 },
   row: { flexDirection: 'row' },
 
   // Avatar Step
@@ -534,31 +534,31 @@ const styles = StyleSheet.create({
   avatarStatusText: { color: '#9CA3AF', fontSize: 12, fontWeight: '600', marginTop: 8 },
 
   photoBtnRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  photoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#181A1F', paddingVertical: 12, borderRadius: 14 },
+  photoBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F1114', paddingVertical: 12, borderRadius: 14 },
   photoBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
   removePhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   removePhotoText: { color: '#9CA3AF', fontSize: 11, fontWeight: '600' },
 
-  dropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#181A1F', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, marginTop: 10 },
+  dropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0F1114', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, marginTop: 10 },
   dropdownBtnActive: { borderWidth: 1, borderColor: '#D4A359' },
   dropdownBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
   avatarScrollContainer: { marginTop: 10 },
   avatarScrollContent: { gap: 8, paddingVertical: 2 },
-  avatarItem: { width: 70, backgroundColor: '#181A1F', borderRadius: 14, paddingVertical: 8, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
+  avatarItem: { width: 70, backgroundColor: '#0F1114', borderRadius: 14, paddingVertical: 8, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
   avatarItemText: { color: '#9CA3AF', fontSize: 10, fontWeight: '600', marginTop: 3 },
 
   // Step 4: Link Card
-  linkCard: { alignItems: 'center', backgroundColor: '#22252A', borderRadius: 22, paddingVertical: 18, paddingHorizontal: 18, marginVertical: 4 },
+  linkCard: { alignItems: 'center', backgroundColor: '#17191E', borderRadius: 22, paddingVertical: 18, paddingHorizontal: 18, marginVertical: 4 },
   codeLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 6 },
-  codeBadge: { backgroundColor: '#181A1F', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 14, marginBottom: 12 },
+  codeBadge: { backgroundColor: '#0F1114', paddingHorizontal: 24, paddingVertical: 8, borderRadius: 14, marginBottom: 12 },
   codeText: { color: '#E04644', fontSize: 30, fontWeight: '800', letterSpacing: 3 },
-  qrBox: { padding: 12, backgroundColor: '#181A1F', borderRadius: 18, marginBottom: 12 },
+  qrBox: { padding: 12, backgroundColor: '#0F1114', borderRadius: 18, marginBottom: 12 },
   qrImage: { width: 200, height: 200 },
 
-  waitingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
+  waitingBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F1114', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   waitingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#D4A359', marginRight: 8 },
   waitingText: { color: '#D4A359', fontSize: 11, fontWeight: '700' },
-  linkedSuccessBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#181A1F', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  linkedSuccessBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0F1114', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   linkedSuccessText: { color: '#43C667', fontSize: 13, fontWeight: '700' },
 
   // Bottom Buttons
@@ -567,6 +567,6 @@ const styles = StyleSheet.create({
   primaryBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 
   bottomActionsFinal: { alignItems: 'center', marginTop: 8, marginBottom: 12 },
-  skipBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', paddingVertical: 13, paddingHorizontal: 22, borderRadius: 20 },
+  skipBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#17191E', paddingVertical: 13, paddingHorizontal: 22, borderRadius: 20 },
   skipBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' }
 });

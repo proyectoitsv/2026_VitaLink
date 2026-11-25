@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
 
   // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 15 },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#17191E', justifyContent: 'center', alignItems: 'center' },
   headerCenter: { alignItems: 'center' },
   headerCategory: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 2 },
   headerTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700' },
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     height: CARD_SIZE, 
     borderRadius: 24, 
     overflow: 'hidden', 
-    backgroundColor: '#22252A',
+    backgroundColor: '#17191E',
     padding: 4,
     position: 'relative'
   },
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
   cornerBR: { bottom: 14, right: 14, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 10 },
 
   // Torch Toggle Pill
-  torchPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', paddingVertical: 11, paddingHorizontal: 20, borderRadius: 22, marginTop: 20 },
+  torchPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#17191E', paddingVertical: 11, paddingHorizontal: 20, borderRadius: 22, marginTop: 20 },
   torchPillActive: { backgroundColor: '#2A251B' },
   torchPillText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600', marginLeft: 8 },
   torchPillTextActive: { color: '#D4A359' },
@@ -191,11 +191,11 @@ const styles = StyleSheet.create({
   // Footer
   footer: { paddingHorizontal: 30, paddingBottom: 42, alignItems: 'center' },
   footerInstruction: { color: '#9CA3AF', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 18 },
-  manualBtn: { backgroundColor: '#22252A', paddingVertical: 12, paddingHorizontal: 22, borderRadius: 20 },
+  manualBtn: { backgroundColor: '#17191E', paddingVertical: 12, paddingHorizontal: 22, borderRadius: 20 },
   manualBtnText: { color: '#E5E7EB', fontSize: 14, fontWeight: '600' },
 
   // Permission UI
-  permissionCard: { padding: 30, alignItems: 'center', backgroundColor: '#22252A', borderRadius: 22, marginHorizontal: 24 },
+  permissionCard: { padding: 30, alignItems: 'center', backgroundColor: '#17191E', borderRadius: 22, marginHorizontal: 24 },
   permTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', marginBottom: 8 },
   permSub: { color: '#9CA3AF', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
   permBtn: { backgroundColor: '#E04644', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 16 },

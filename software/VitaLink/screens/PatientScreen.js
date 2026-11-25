@@ -1,12 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar, Image, Vibration, AppState, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, PermissionsAndroid, Platform, ActivityIndicator, StatusBar, Image, Vibration, AppState, Modal, Linking, Alert, ScrollView } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
 import { decode as decodeBase64, encode as encodeBase64 } from 'base-64';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from '@react-native-firebase/auth';
-import { getFirestore, collection, addDoc, setDoc, getDoc, doc, serverTimestamp, onSnapshot } from '@react-native-firebase/firestore';
+import { getFirestore, collection, addDoc, setDoc, getDoc, updateDoc, doc, serverTimestamp, onSnapshot } from '@react-native-firebase/firestore';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Animatable from 'react-native-animatable';
+import { colors } from '../constants/theme';
+import { useAlertaActiva, cancelarAlerta, listaVistas } from '../constants/alertas';
+import VistoPorFamilia from '../components/VistoPorFamilia';
+import { setPulseraActiva } from '../services/pulseraActiva';
+import VitalsPanel, { mostrarValor } from '../components/VitalsPanel';
+import { EmergencyBackdrop, EmergencyHero, EmergencyStatusPill, EmergencyVitals, HoldToConfirm } from '../components/EmergencyVisuals';
+import {
+  actualizarModoServicio, mostrarEmergencia, cancelarNotificacionEmergencia, mostrarBateriaBaja,
+  crearDetectorBateria, solicitarPermisoNotificaciones, abrirAjustesBateria,
+  traerAppAlFrente, abrirPermisoPantallaCompleta,
+} from '../services/notificaciones';
+
+// Si no llega un valor de pulso/oxígeno en este tiempo, la pulsera terminó su ciclo de medición
+const TIEMPO_SIN_DATOS_PAUSA_MS = 3500;
 
 const bleManager = new BleManager();
 const VITALINK_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
@@ -43,11 +57,24 @@ export default function PatientScreen({ navigation }) {
   const [otaMessage, setOtaMessage] = useState('');
 
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({ nombre: '', apellido: '', avatar: 'account-circle', foto: null });
+  const [profile, setProfile] = useState({ nombre: '', apellido: '', avatar: 'account-circle', foto: null, telefonoEmergencia: '' });
   const [location, setLocation] = useState(null);
+  const [estadoSensor, setEstadoSensor] = useState('esperando'); // 'calibrando' | 'midiendo' | 'pausa' | 'sin_muneca' | 'esperando'
+  const [calibInicioMs, setCalibInicioMs] = useState(null);
   const db = getFirestore();
+  const patientUid = user ? user.uid.substring(0, 8) : null;
+  const [alertaActiva, alertaActivaRef] = useAlertaActiva(db, patientUid);
+  const creandoAlertaRef = useRef(false);
+  const estadoSensorRef = useRef('esperando');
+  const ultimoVitalRef = useRef(0);
   const userRef = useRef(null);
   const locationRef = useRef(null);
+  // Ubicación: problema a mostrar ('permiso' | 'gps' | null) y estado interno
+  const [ubicacionProblema, setUbicacionProblema] = useState(null);
+  const locationSubRef = useRef(null);
+  const puedePreguntarUbicacionRef = useRef(true);
+  const iniciarUbicacionRef = useRef(null);
+  const ultimaUbicacionSubidaRef = useRef({ lat: null, lng: null, ms: 0 });
   const datosRef = useRef({ bpm: '--', spo2: '--', bateria: '--', alertaCaida: '0', alertaSOS: '0' });
   const isConnectedRef = useRef(false);
   const isConnectingRef = useRef(false);
@@ -60,13 +87,177 @@ export default function PatientScreen({ navigation }) {
   const subscriptionsRef = useRef([]);
   const userExplicitlyDisconnectedRef = useRef(false);
   const isUpdatingOtaRef = useRef(false);
+  // Control de conexión: cada intento tiene un número de "generación". Los eventos de
+  // desconexión de conexiones viejas se ignoran para no entrar en bucles de reconexión.
+  const mountedRef = useRef(true);
+  const connGenRef = useRef(0);
+  const disconnectSubRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const ubicacionPermitidaRef = useRef(false);
+  const alertaNotificadaRef = useRef(null);
+  const detectorBateriaRef = useRef(crearDetectorBateria((nivel) =>
+    mostrarBateriaBaja({ clave: 'propia', nivel, rol: 'paciente' })));
   const otaControlSubRef = useRef(null);
-  const activeAlertDocRef = useRef(null);
-  const alertResetTimerRef = useRef(null);
 
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  const actualizarEstadoSensor = (nuevo) => {
+    if (estadoSensorRef.current !== nuevo) {
+      // Al empezar una medición nueva se arranca la cuenta de los 15 s de estabilización
+      if (nuevo === 'calibrando' && estadoSensorRef.current !== 'midiendo') {
+        setCalibInicioMs(Date.now());
+      }
+      estadoSensorRef.current = nuevo;
+      setEstadoSensor(nuevo);
+    }
+  };
+
+  // Procesa cada lectura de pulso u oxígeno para saber si la pulsera está midiendo.
+  // La pulsera manda -1 mientras descarta los primeros 15 s (estabilización) o no tiene valor válido.
+  const registrarLecturaVital = (val) => {
+    const v = String(val).trim();
+    if (v === '0') {
+      actualizarEstadoSensor('sin_muneca');
+      return;
+    }
+    ultimoVitalRef.current = Date.now();
+    const bpmValido = parseInt(datosRef.current.bpm, 10) > 0;
+    actualizarEstadoSensor(bpmValido ? 'midiendo' : 'calibrando');
+  };
+
+  // Cuando la pulsera deja de mandar valores, pasó al descanso entre mediciones
+  useEffect(() => {
+    if (!connected) {
+      actualizarEstadoSensor('esperando');
+      return undefined;
+    }
+    const t = setInterval(() => {
+      const midiendo = estadoSensorRef.current === 'midiendo' || estadoSensorRef.current === 'calibrando';
+      if (midiendo && Date.now() - ultimoVitalRef.current > TIEMPO_SIN_DATOS_PAUSA_MS) {
+        actualizarEstadoSensor('pausa');
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [connected]);
+
+  // Vibración continua mientras la emergencia esté activa
+  useEffect(() => {
+    if (!alertaActiva) {
+      Vibration.cancel();
+      if (alertaNotificadaRef.current) {
+        cancelarNotificacionEmergencia(alertaNotificadaRef.current);
+        alertaNotificadaRef.current = null;
+      }
+      return undefined;
+    }
+    try { Vibration.vibrate([0, 600, 400, 600, 1200], true); } catch (e) {}
+    return () => Vibration.cancel();
+  }, [alertaActiva?.id]);
+
+  // Avisarle a la pulsera para que deje de vibrar:
+  //   "V" cuando un familiar ya vio la alerta, "X" cuando la alerta se cancela.
+  const avisoPulseraRef = useRef({ alertaId: null, vistaEnviada: false });
+  const escribirEnPulsera = (comando) => {
+    const dev = deviceRef.current;
+    if (!dev || !isConnectedRef.current) return;
+    dev.writeCharacteristicWithResponseForService(VITALINK_SERVICE_UUID, CAIDA_CHAR_UUID, encodeBase64(comando))
+      .catch((e) => console.log('No se pudo avisar a la pulsera:', e?.message));
+  };
+  const cantidadVistas = alertaActiva ? listaVistas(alertaActiva).length : 0;
+  useEffect(() => {
+    const aviso = avisoPulseraRef.current;
+    if (alertaActiva) {
+      if (aviso.alertaId !== alertaActiva.id) {
+        aviso.alertaId = alertaActiva.id;
+        aviso.vistaEnviada = false;
+      }
+      if (cantidadVistas > 0 && !aviso.vistaEnviada) {
+        aviso.vistaEnviada = true;
+        escribirEnPulsera('V');
+      }
+    } else if (aviso.alertaId) {
+      aviso.alertaId = null;
+      aviso.vistaEnviada = false;
+      escribirEnPulsera('X');
+    }
+  }, [alertaActiva?.id, cantidadVistas]);
+
+  // Guía para el permiso "Mostrar sobre otras apps" (alerta a pantalla completa con la app cerrada)
+  const configurarPantallaCompleta = () => {
+    Alert.alert(
+      'Alerta a pantalla completa',
+      'Para que la emergencia ocupe toda la pantalla aunque la app esté cerrada o estés usando otra app:\n\n1. Buscá VitaLink en la lista.\n2. Activá "Permitir mostrar sobre otras apps".\n3. Volvé a VitaLink.',
+      [
+        { text: 'Ahora no', style: 'cancel' },
+        {
+          text: 'Abrir ajustes',
+          onPress: () => {
+            abrirPermisoPantallaCompleta();
+            const u = userRef.current;
+            if (u) {
+              setDoc(doc(db, 'pacientes', u.uid.substring(0, 8)), { pantallaCompletaConfigurada: true }, { merge: true }).catch(() => {});
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Servicio en primer plano: mantiene la conexión con la pulsera con la pantalla apagada
+  useEffect(() => {
+    if (connected) {
+      actualizarModoServicio('paciente', { texto: 'Pulsera conectada · vigilando caídas', conUbicacion: ubicacionPermitidaRef.current });
+    } else if (!userExplicitlyDisconnectedRef.current && lastKnownDeviceIdRef.current && (isScanning || isConnecting)) {
+      actualizarModoServicio('paciente', { texto: 'Buscando la pulsera...', conUbicacion: ubicacionPermitidaRef.current });
+    } else if (userExplicitlyDisconnectedRef.current) {
+      actualizarModoServicio('paciente', null);
+    }
+  }, [connected, isScanning, isConnecting]);
+
+  // Crea la alerta en Firestore; queda activa hasta que se cancele o venza
+  const crearAlertaCritica = (tipo) => {
+    const u = userRef.current;
+    if (!u || alertaActivaRef.current || creandoAlertaRef.current) return;
+    creandoAlertaRef.current = true;
+
+    // El ID se genera en el celular: la pantalla de emergencia aparece al instante
+    // aunque no haya internet (Firestore la sube en cuanto vuelva la conexión)
+    const ref = doc(collection(db, 'pacientes', u.uid.substring(0, 8), 'alertas_criticas'));
+
+    if (AppState.currentState !== 'active') {
+      // App en segundo plano: abrirla a pantalla completa y dejar la notificación de respaldo
+      alertaNotificadaRef.current = ref.id;
+      mostrarEmergencia({ alertaId: ref.id, tipo, rol: 'paciente' });
+      traerAppAlFrente();
+    }
+
+    setDoc(ref, {
+      tipo,
+      activa: true,
+      timestamp: serverTimestamp(),
+      creadaEnMs: Date.now(),
+      ubicacion: locationRef.current ? { latitude: locationRef.current.latitude, longitude: locationRef.current.longitude } : null,
+    })
+      .catch((err) => console.warn('No se pudo registrar la alerta:', err))
+      .finally(() => {
+        setTimeout(() => { creandoAlertaRef.current = false; }, 1500);
+      });
+
+    // Sin ubicación todavía: se pide una al GPS y se agrega a la alerta apenas llega
+    if (!locationRef.current) {
+      const tiempoMax = new Promise((resolve) => setTimeout(() => resolve(null), 15000));
+      Promise.race([Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), tiempoMax])
+        .then((pos) => {
+          if (!pos || !pos.coords) return;
+          setLocation(pos.coords);
+          return updateDoc(ref, { ubicacion: { latitude: pos.coords.latitude, longitude: pos.coords.longitude } });
+        })
+        .catch((err) => console.warn('No se pudo agregar la ubicación a la alerta:', err));
+    }
+  };
+
 
   useEffect(() => {
     locationRef.current = location;
@@ -103,7 +294,9 @@ export default function PatientScreen({ navigation }) {
               nombre: data.nombre || '',
               apellido: data.apellido || '',
               avatar: data.avatar || 'account-circle',
-              foto: data.foto || null
+              foto: data.foto || null,
+              telefonoEmergencia: data.telefonoEmergencia || '',
+              pantallaCompletaConfigurada: !!data.pantallaCompletaConfigurada
             });
           } else {
             navigation.replace('PatientOnboarding');
@@ -111,19 +304,34 @@ export default function PatientScreen({ navigation }) {
         });
       }
     });
-    
-    let locationSub = null;
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        locationSub = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
-          (loc) => {
-            setLocation(loc.coords);
-          }
-        );
+
+    // Ubicación del celular: permiso, GPS encendido, primer dato rápido y seguimiento
+    const iniciarUbicacion = async () => {
+      try {
+        const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+        puedePreguntarUbicacionRef.current = canAskAgain !== false;
+        if (status !== 'granted') { setUbicacionProblema('permiso'); return; }
+        ubicacionPermitidaRef.current = true;
+        if (!(await Location.hasServicesEnabledAsync())) { setUbicacionProblema('gps'); return; }
+        setUbicacionProblema(null);
+        // Primero la última conocida (instantánea), después una nueva y el seguimiento continuo
+        const ultima = await Location.getLastKnownPositionAsync();
+        if (ultima && ultima.coords && !locationRef.current) setLocation(ultima.coords);
+        if (!locationSubRef.current) {
+          locationSubRef.current = await Location.watchPositionAsync(
+            { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+            (loc) => { setLocation(loc.coords); }
+          );
+        }
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+          .then((pos) => { if (pos && pos.coords) setLocation(pos.coords); })
+          .catch(() => {});
+      } catch (e) {
+        console.warn('Ubicación:', e);
       }
-    })();
+    };
+    iniciarUbicacionRef.current = iniciarUbicacion;
+    iniciarUbicacion();
 
     const interval = setInterval(() => {
       const currentUser = userRef.current;
@@ -134,13 +342,28 @@ export default function PatientScreen({ navigation }) {
           bpm: datosRef.current.bpm,
           spo2: datosRef.current.spo2,
           bateria: datosRef.current.bateria,
+          estadoSensor: estadoSensorRef.current,
           timestamp: serverTimestamp()
         };
         if (currentLocation) {
           pushData.ubicacion = { latitude: currentLocation.latitude, longitude: currentLocation.longitude };
+          pushData.ubicacionTs = serverTimestamp();
+          ultimaUbicacionSubidaRef.current = { lat: currentLocation.latitude, lng: currentLocation.longitude, ms: Date.now() };
         }
         setDoc(doc(db, 'pacientes', currentUser.uid.substring(0, 8), 'signos_actuales', 'live'), pushData)
           .catch((err) => console.error('Error Firestore:', err));
+      } else if (currentUser && currentLocation) {
+        // Sin datos de la pulsera igual se comparte la ubicación (sin tocar los signos vitales).
+        // Solo si cambió o pasó un minuto, para no gastar escrituras.
+        const prev = ultimaUbicacionSubidaRef.current;
+        const cambio = prev.lat !== currentLocation.latitude || prev.lng !== currentLocation.longitude;
+        if (cambio || Date.now() - prev.ms > 60000) {
+          ultimaUbicacionSubidaRef.current = { lat: currentLocation.latitude, lng: currentLocation.longitude, ms: Date.now() };
+          setDoc(doc(db, 'pacientes', currentUser.uid.substring(0, 8), 'signos_actuales', 'live'), {
+            ubicacion: { latitude: currentLocation.latitude, longitude: currentLocation.longitude },
+            ubicacionTs: serverTimestamp(),
+          }, { merge: true }).catch((err) => console.error('Error Firestore:', err));
+        }
       }
     }, 5000);
 
@@ -149,23 +372,49 @@ export default function PatientScreen({ navigation }) {
 
     // Escuchar cuando la app pasa de segundo plano a primer plano
     const appStateSub = AppState.addEventListener('change', (nextState) => {
+      // Al volver (por ejemplo de los ajustes), revisar otra vez el permiso y el GPS
+      if (nextState === 'active' && iniciarUbicacionRef.current) iniciarUbicacionRef.current();
       if (nextState === 'active' && !isConnectedRef.current && !userExplicitlyDisconnectedRef.current) {
         console.log('📱 App activa: verificando conexión con pulsera...');
         checkAndAutoConnect();
       }
     });
 
-    return () => { 
+    solicitarPermisoNotificaciones();
+
+    return () => {
+      mountedRef.current = false;
+      connGenRef.current++;
+      if (disconnectSubRef.current) { try { disconnectSubRef.current.remove(); } catch (e) {} disconnectSubRef.current = null; }
+      subscriptionsRef.current.forEach((s) => { try { s.remove(); } catch (e) {} });
+      subscriptionsRef.current = [];
+      if (deviceRef.current) { deviceRef.current.cancelConnection().catch(() => {}); deviceRef.current = null; }
+      isConnectedRef.current = false;
+      isConnectingRef.current = false;
+      Vibration.cancel();
+      setPulseraActiva(null);
+      actualizarModoServicio('paciente', null);
       appStateSub.remove();
-      unsubAuth(); 
-      unsubProfile(); 
-      clearInterval(interval); 
-      if (locationSub) locationSub.remove();
+      unsubAuth();
+      unsubProfile();
+      clearInterval(interval);
+      if (locationSubRef.current) { try { locationSubRef.current.remove(); } catch (e) {} locationSubRef.current = null; }
       if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
       if (autoReconnectTimerRef.current) clearTimeout(autoReconnectTimerRef.current);
       try { bleManager.stopDeviceScan(); } catch (e) {}
     };
   }, []);
+
+  // Tarjeta "Activá la ubicación": abre el pedido de GPS o los ajustes de la app
+  const arreglarUbicacion = async () => {
+    if (ubicacionProblema === 'gps') {
+      try { await Location.enableNetworkProviderAsync(); } catch (e) {}
+    } else if (!puedePreguntarUbicacionRef.current) {
+      Linking.openSettings();
+      return;
+    }
+    if (iniciarUbicacionRef.current) iniciarUbicacionRef.current();
+  };
 
   const requestPermissions = async () => {
     if (Platform.OS === 'android') {
@@ -181,6 +430,13 @@ export default function PatientScreen({ navigation }) {
     if (!isConnectedRef.current && !isConnectingRef.current && !deviceRef.current) return;
     isConnectedRef.current = false;
     isConnectingRef.current = false;
+    connGenRef.current++; // invalida eventos pendientes de la conexión anterior
+    setPulseraActiva(null);
+    if (disconnectSubRef.current) {
+      try { disconnectSubRef.current.remove(); } catch (e) {}
+      disconnectSubRef.current = null;
+    }
+    if (!mountedRef.current) return;
 
     // 1. Limpiar suscripciones activas
     if (subscriptionsRef.current) {
@@ -224,12 +480,15 @@ export default function PatientScreen({ navigation }) {
     // 5. Auto-reconexión si corresponde
     if (allowAutoReconnect && !userExplicitlyDisconnectedRef.current) {
       if (autoReconnectTimerRef.current) clearTimeout(autoReconnectTimerRef.current);
+      // Espera creciente (3s, 6s, 12s... hasta 30s) para no saturar a la pulsera con intentos
+      const espera = Math.min(30000, 3000 * Math.pow(2, reconnectAttemptsRef.current));
+      reconnectAttemptsRef.current = Math.min(reconnectAttemptsRef.current + 1, 4);
       autoReconnectTimerRef.current = setTimeout(() => {
-        if (!isConnectedRef.current && !userExplicitlyDisconnectedRef.current) {
+        if (mountedRef.current && !isConnectedRef.current && !userExplicitlyDisconnectedRef.current) {
           console.log('🔄 Reintentando auto-conexión con pulsera...');
           checkAndAutoConnect();
         }
-      }, 3000);
+      }, espera);
     }
   };
 
@@ -253,15 +512,24 @@ export default function PatientScreen({ navigation }) {
 
       // Si llegaron datos de los sensores en los últimos 10 segundos, la pulsera está 100% activa
       const elapsed = Date.now() - lastDataTimestampRef.current;
-      if (elapsed < 10000) {
+      if (elapsed < 15000) {
         pingFailures = 0;
         return;
       }
 
-      // Si pasaron más de 10s sin datos de la pulsera, hacer un ping suave
+      // Si Android confirma que el enlace cayó, reconectar; si sigue activo no se corta por un ping lento
+      const linkId = deviceRef.current?.id;
+      const enlazado = linkId ? await bleManager.isDeviceConnected(linkId).catch(() => true) : false;
+      if (!enlazado) {
+        clearInterval(interval);
+        if (isConnectedRef.current) handleDisconnection(true);
+        return;
+      }
+
+      // Si pasaron más de 15s sin datos de la pulsera, hacer un ping suave
       try {
         const pingPromise = deviceRef.current.readRSSI();
-        const timeoutPromise = new Promise((_, reject) => 
+        const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('TIMEOUT')), 3000)
         );
         await Promise.race([pingPromise, timeoutPromise]);
@@ -269,8 +537,8 @@ export default function PatientScreen({ navigation }) {
         lastDataTimestampRef.current = Date.now();
       } catch (err) {
         pingFailures++;
-        console.log(`⚠️ Alerta ping BLE (${pingFailures}/2):`, err.message);
-        if (pingFailures >= 2) {
+        console.log(`⚠️ Alerta ping BLE (${pingFailures}/3):`, err.message);
+        if (pingFailures >= 3) {
           clearInterval(interval);
           if (isConnectedRef.current) {
             console.log('⚡ Pulsera sin respuesta tras 2 pings');
@@ -377,11 +645,12 @@ export default function PatientScreen({ navigation }) {
         activeDev = await bleManager.connectToDevice(devId, { refreshGatt: 'OnConnected' });
         setDevice(activeDev);
         deviceRef.current = activeDev;
-        activeDev.onDisconnected(() => {
-          if (!isUpdatingOtaRef.current) {
-            console.log('⚡ Pulsera desconectada físicamente');
-            handleDisconnection(true);
-          }
+        const gen = ++connGenRef.current;
+        if (disconnectSubRef.current) { try { disconnectSubRef.current.remove(); } catch (e) {} }
+        disconnectSubRef.current = activeDev.onDisconnected(() => {
+          if (gen !== connGenRef.current || isUpdatingOtaRef.current) return;
+          console.log('⚡ Pulsera desconectada físicamente');
+          handleDisconnection(true);
         });
       }
       await new Promise(resolve => setTimeout(resolve, 600));
@@ -396,10 +665,23 @@ export default function PatientScreen({ navigation }) {
     }
   };
 
+  // Ante un error de notificación, confirmar con Android si el enlace realmente se cayó
+  const verificarEnlace = async (gen) => {
+    const id = deviceRef.current?.id;
+    if (!id || gen !== connGenRef.current) return;
+    const ok = await bleManager.isDeviceConnected(id).catch(() => false);
+    if (!ok && gen === connGenRef.current && isConnectedRef.current) handleDisconnection(true);
+  };
+
   const connectToDevice = async (scannedDevice) => {
     if (isConnectingRef.current || isConnectedRef.current) return;
     isConnectingRef.current = true;
     setIsConnecting(true);
+    const gen = ++connGenRef.current;
+    if (disconnectSubRef.current) {
+      try { disconnectSubRef.current.remove(); } catch (e) {}
+      disconnectSubRef.current = null;
+    }
     if (autoReconnectTimerRef.current) {
       clearTimeout(autoReconnectTimerRef.current);
       autoReconnectTimerRef.current = null;
@@ -434,12 +716,18 @@ export default function PatientScreen({ navigation }) {
       setDevice(activeDevice);
       deviceRef.current = activeDevice;
 
-      // Listener para detectar desconexión si la pulsera se apaga
-      activeDevice.onDisconnected((error, disconnectedDev) => {
+      if (gen !== connGenRef.current || !mountedRef.current) {
+        bleManager.cancelDeviceConnection(activeDevice.id).catch(() => {});
+        return;
+      }
+
+      // Listener para detectar desconexión si la pulsera se apaga (solo de ESTA conexión)
+      disconnectSubRef.current = activeDevice.onDisconnected(() => {
+        if (gen !== connGenRef.current) return;
         console.log('⚡ Pulsera desconectada físicamente');
         handleDisconnection(true);
       });
-      
+
       await new Promise(resolve => setTimeout(resolve, 500));
       await activeDevice.discoverAllServicesAndCharacteristics();
 
@@ -486,6 +774,8 @@ export default function PatientScreen({ navigation }) {
         }
       }
 
+      if (gen !== connGenRef.current || !mountedRef.current) return;
+      reconnectAttemptsRef.current = 0;
       lastKnownDeviceIdRef.current = activeDevice.id;
 
       // Guardar el ID de la pulsera en Firestore para que el paciente la recuerde siempre
@@ -498,6 +788,8 @@ export default function PatientScreen({ navigation }) {
 
       isConnectedRef.current = true;
       isConnectingRef.current = false;
+      deviceRef.current = activeDevice;
+      setPulseraActiva(activeDevice);
       setConnected(true);
       setIsConnecting(false);
       setDisconnectNotice(false);
@@ -507,7 +799,7 @@ export default function PatientScreen({ navigation }) {
         setShowOtaModal(false);
         setOtaStatus('idle');
       }
-      
+
       try {
         Vibration.vibrate([0, 70, 50, 70]); // Vibración sutil de éxito
       } catch (e) {}
@@ -534,15 +826,16 @@ export default function PatientScreen({ navigation }) {
       const subBpm = bleManager.monitorCharacteristicForDevice(activeDevice.id, VITALINK_SERVICE_UUID, BPM_CHAR_UUID, (error, characteristic) => {
         if (error) {
           if (error.errorCode === 201 || error.message?.toLowerCase().includes('disconnect')) {
-            handleDisconnection(true);
+            verificarEnlace(gen);
           }
           return;
         }
         if (characteristic?.value) {
           lastDataTimestampRef.current = Date.now();
-          const val = decodeBase64(characteristic.value);
+          const val = decodeBase64(characteristic.value).trim();
           setBpm(val);
           datosRef.current.bpm = val;
+          registrarLecturaVital(val);
         }
       });
       subscriptionsRef.current.push(subBpm);
@@ -550,15 +843,16 @@ export default function PatientScreen({ navigation }) {
       const subSpo2 = bleManager.monitorCharacteristicForDevice(activeDevice.id, VITALINK_SERVICE_UUID, SPO2_CHAR_UUID, (error, characteristic) => {
         if (error) {
           if (error.errorCode === 201 || error.message?.toLowerCase().includes('disconnect')) {
-            handleDisconnection(true);
+            verificarEnlace(gen);
           }
           return;
         }
         if (characteristic?.value) {
           lastDataTimestampRef.current = Date.now();
-          const val = decodeBase64(characteristic.value);
+          const val = decodeBase64(characteristic.value).trim();
           setSpo2(val);
           datosRef.current.spo2 = val;
+          registrarLecturaVital(val);
         }
       });
       subscriptionsRef.current.push(subSpo2);
@@ -569,23 +863,14 @@ export default function PatientScreen({ navigation }) {
           lastDataTimestampRef.current = Date.now();
           const val = decodeBase64(characteristic.value);
           setBateria(val);
+          detectorBateriaRef.current(val);
           datosRef.current.bateria = val;
         }
       });
       subscriptionsRef.current.push(subBat);
 
-      const deactivateCurrentAlert = () => {
-        if (alertResetTimerRef.current) {
-          clearTimeout(alertResetTimerRef.current);
-          alertResetTimerRef.current = null;
-        }
-        if (activeAlertDocRef.current) {
-          const docToClose = activeAlertDocRef.current;
-          activeAlertDocRef.current = null;
-          setDoc(docToClose, { activa: false }, { merge: true }).catch(() => {});
-        }
-      };
-
+      // La pulsera manda '1' al detectar la emergencia y '0' cuando su alarma interna se reinicia.
+      // El '0' se ignora: la alerta sigue activa hasta que el familiar o el paciente la cancelen (o venza).
       const subCaida = bleManager.monitorCharacteristicForDevice(activeDevice.id, VITALINK_SERVICE_UUID, CAIDA_CHAR_UUID, (error, characteristic) => {
         if (error) return;
         if (characteristic?.value) {
@@ -593,24 +878,10 @@ export default function PatientScreen({ navigation }) {
           const val = decodeBase64(characteristic.value).trim();
           setAlertaCaida(val);
           datosRef.current.alertaCaida = val;
-          if (val === '1' && userRef.current) {
-            if (alertResetTimerRef.current) clearTimeout(alertResetTimerRef.current);
-            addDoc(collection(db, 'pacientes', userRef.current.uid.substring(0, 8), 'alertas_criticas'), { 
-              tipo: 'CAIDA', 
-              activa: true,
-              timestamp: serverTimestamp(), 
-              ubicacion: locationRef.current ? { latitude: locationRef.current.latitude, longitude: locationRef.current.longitude } : null 
-            }).then((docRef) => {
-              activeAlertDocRef.current = docRef;
-            }).catch(() => {});
-
-            alertResetTimerRef.current = setTimeout(() => {
-              setAlertaCaida('0');
-              datosRef.current.alertaCaida = '0';
-              deactivateCurrentAlert();
-            }, 15000);
-          } else if (val === '0') {
-            deactivateCurrentAlert();
+          if (val === '1') crearAlertaCritica('CAIDA');
+          // 'C' = el paciente tocó el botón Cancelar de la pulsera
+          if (val === 'C' && alertaActivaRef.current) {
+            cancelarAlerta(alertaActivaRef.current, 'paciente').catch(() => {});
           }
         }
       });
@@ -623,31 +894,14 @@ export default function PatientScreen({ navigation }) {
           const val = decodeBase64(characteristic.value).trim();
           setAlertaSOS(val);
           datosRef.current.alertaSOS = val;
-          if (val === '1' && userRef.current) {
-            if (alertResetTimerRef.current) clearTimeout(alertResetTimerRef.current);
-            addDoc(collection(db, 'pacientes', userRef.current.uid.substring(0, 8), 'alertas_criticas'), { 
-              tipo: 'SOS', 
-              activa: true,
-              timestamp: serverTimestamp(), 
-              ubicacion: locationRef.current ? { latitude: locationRef.current.latitude, longitude: locationRef.current.longitude } : null 
-            }).then((docRef) => {
-              activeAlertDocRef.current = docRef;
-            }).catch(() => {});
-
-            alertResetTimerRef.current = setTimeout(() => {
-              setAlertaSOS('0');
-              datosRef.current.alertaSOS = '0';
-              deactivateCurrentAlert();
-            }, 15000);
-          } else if (val === '0') {
-            deactivateCurrentAlert();
-          }
+          if (val === '1') crearAlertaCritica('SOS');
         }
       });
       subscriptionsRef.current.push(subSos);
 
     } catch (e) {
       console.warn('Error connectToDevice:', e);
+      if (gen !== connGenRef.current || !mountedRef.current) return;
       if (scannedDevice?.id) {
         bleManager.cancelDeviceConnection(scannedDevice.id).catch(() => {});
       }
@@ -1012,27 +1266,60 @@ export default function PatientScreen({ navigation }) {
   };
   const greeting = getGreeting();
 
-  const batNum = parseInt(bateria, 10);
-  const batValid = !isNaN(batNum) && batNum >= 0;
-  const batBars = !batValid ? 2 : batNum > 66 ? 3 : batNum > 25 ? 2 : 1;
-
   return (
     <View style={styles.container}>
       <StatusBar hidden={true} translucent={true} backgroundColor="transparent" />
-      
+      <EmergencyBackdrop visible={!!alertaActiva} />
+      {alertaActiva ? (
+        <View key="emergencia" style={styles.emergencyContainer}>
+          <Animatable.View animation="fadeInDown" delay={420} duration={450}>
+            <EmergencyStatusPill inicioMs={alertaActiva.inicioMs} />
+          </Animatable.View>
+
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Animatable.View animation="zoomIn" delay={250} duration={550} easing="ease-out-back">
+              <EmergencyHero compact tipo={alertaActiva.tipo} subtitulo="Quedate tranquilo, ya le avisamos a tu familia con tu ubicación." />
+            </Animatable.View>
+            <Animatable.View animation="fadeInUp" delay={560} duration={450} style={{ marginTop: 18 }}>
+              <EmergencyVitals items={[
+                { icon: 'cards-heart', value: mostrarValor(bpm), unit: 'LPM', label: 'Pulso' },
+                { icon: 'water', value: mostrarValor(spo2), unit: '%', label: 'Oxígeno' },
+              ]} />
+            </Animatable.View>
+            <Animatable.View animation="fadeInUp" delay={680} duration={450} style={{ marginTop: 14 }}>
+              <VistoPorFamilia vistas={listaVistas(alertaActiva)} />
+            </Animatable.View>
+          </View>
+
+          <Animatable.View animation="fadeInUp" delay={800} duration={450}>
+            <HoldToConfirm
+              label="Mantené presionado si estás bien"
+              holdingLabel="Cancelando alerta..."
+              icon="hand-back-right-outline"
+              onConfirm={() => cancelarAlerta(alertaActivaRef.current, 'paciente').catch(() => {})}
+            />
+            <View style={styles.emergencyNotice}>
+              <MaterialCommunityIcons name="gesture-tap-hold" size={15} color="rgba(255,255,255,0.7)" style={{ marginRight: 6 }} />
+              <Text style={styles.emergencyNoticeText}>O tocá el botón Cancelar de la pulsera</Text>
+            </View>
+          </Animatable.View>
+        </View>
+      ) : (
+      <Animatable.View key="normal" animation="fadeIn" duration={400} style={{ flex: 1 }}>
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity 
-            style={styles.backCircleBtn} 
+          <TouchableOpacity
+            style={styles.backCircleBtn}
             onPress={() => navigation.goBack()}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons name="chevron-left" size={26} color="#E5E7EB" />
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.avatarCircle} 
+          <TouchableOpacity
+            style={styles.avatarCircle}
             onPress={() => navigation.navigate('Profile')}
             activeOpacity={0.8}
           >
@@ -1048,10 +1335,10 @@ export default function PatientScreen({ navigation }) {
               <Text style={styles.headerTitle} numberOfLines={1}>
                 {profile.nombre ? profile.nombre.trim().split(' ')[0] : `Paciente`}
               </Text>
-              <Animatable.View 
-                animation={isScanning || isConnecting ? 'flash' : undefined} 
-                iterationCount="infinite" 
-                style={[styles.statusDot, { backgroundColor: getStatusColor() }]} 
+              <Animatable.View
+                animation={isScanning || isConnecting ? 'flash' : undefined}
+                iterationCount="infinite"
+                style={[styles.statusDot, { backgroundColor: getStatusColor() }]}
               />
             </View>
           </View>
@@ -1080,31 +1367,31 @@ export default function PatientScreen({ navigation }) {
         {/* VISTA 1: CUANDO LA PULSERA NO ESTÁ CONECTADA */}
         {!connected ? (
           <Animatable.View animation="fadeIn" duration={600} style={styles.notConnectedWrapper}>
-            
+
             {/* Radar / Animación central */}
             <View style={styles.radarContainer}>
-              <Animatable.View 
-                animation="pulse" 
-                iterationCount="infinite" 
-                duration={2600} 
-                style={styles.radarRingOuter} 
+              <Animatable.View
+                animation="pulse"
+                iterationCount="infinite"
+                duration={2600}
+                style={styles.radarRingOuter}
               />
-              <Animatable.View 
-                animation="pulse" 
-                iterationCount="infinite" 
-                duration={1800} 
-                style={styles.radarRingInner} 
+              <Animatable.View
+                animation="pulse"
+                iterationCount="infinite"
+                duration={1800}
+                style={styles.radarRingInner}
               />
-              <Animatable.View 
+              <Animatable.View
                 animation={isScanning ? "rotate" : undefined}
                 iterationCount={isScanning ? "infinite" : undefined}
                 duration={3000}
                 style={[styles.radarCore, isScanning && styles.radarCoreScanning]}
               >
-                <MaterialCommunityIcons 
-                  name={isScanning ? "radar" : isConnecting ? "bluetooth-transfer" : "watch-variant"} 
-                  size={54} 
-                  color="#E04644" 
+                <MaterialCommunityIcons
+                  name={isScanning ? "radar" : isConnecting ? "bluetooth-transfer" : "watch-variant"}
+                  size={54}
+                  color="#E04644"
                 />
               </Animatable.View>
             </View>
@@ -1114,15 +1401,15 @@ export default function PatientScreen({ navigation }) {
               {isConnecting ? 'Sincronizando con VitaLink...' : isScanning ? 'Buscando tu Pulsera...' : 'Pulsera Desconectada'}
             </Text>
             <Text style={styles.notConnectedSubtitle}>
-              {isConnecting || isScanning 
-                ? 'Mantené la pulsera cerca de tu teléfono.' 
+              {isConnecting || isScanning
+                ? 'Mantené la pulsera cerca de tu teléfono.'
                 : 'Conectá tu pulsera VitaLink para visualizar tus signos vitales y mantener informada a tu familia.'}
             </Text>
 
             {/* Botón principal de conexión */}
             <Animatable.View animation="pulse" iterationCount={isScanning || isConnecting ? undefined : "infinite"} duration={3000} style={{ width: '100%', marginTop: 24 }}>
-              <TouchableOpacity 
-                style={[styles.bigConnectBtn, (isScanning || isConnecting) && styles.bigConnectBtnActive]} 
+              <TouchableOpacity
+                style={[styles.bigConnectBtn, (isScanning || isConnecting) && styles.bigConnectBtnActive]}
                 onPress={scanAndConnect}
                 disabled={isScanning || isConnecting}
                 activeOpacity={0.8}
@@ -1148,114 +1435,66 @@ export default function PatientScreen({ navigation }) {
 
           </Animatable.View>
         ) : (
-          /* VISTA 2: CUANDO LA PULSERA ESTÁ CONECTADA (DASHBOARD FIEL A LA REFERENCIA) */
+          /* VISTA 2: PULSERA CONECTADA */
           <Animatable.View animation="fadeInUp" duration={500} style={{ flex: 1 }}>
-            
-            {/* Barra de estado conectada (2 píldoras grises oscuras) */}
-            <View style={styles.connectedStatusBar}>
-              <View style={styles.connectedBadge}>
-                <Animatable.View animation="pulse" iterationCount="infinite" duration={1400} style={styles.greenPulseDot} />
-                <Text style={styles.connectedBadgeText}>VITALINK EN LÍNEA</Text>
-              </View>
-              <TouchableOpacity style={styles.disconnectIconBtn} onPress={disconnectDevice} activeOpacity={0.7}>
-                <Text style={styles.disconnectIconText}>Desconectar</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* BPM Hero Card (Frecuencia Cardíaca + Corazón + LPM + Onda ECG) */}
-            <View style={styles.heroCard}>
-              <Text style={styles.cardTitle}>Frecuencia Cardíaca</Text>
-              
-              <View style={styles.bpmContainer}>
-                <View style={styles.bpmLeftGroup}>
-                  <Animatable.View 
-                    animation={heartbeatAnim} 
-                    iterationCount="infinite" 
-                    duration={bpm !== '--' && bpm !== '0' && bpm !== '-1' ? Math.max(500, 60000 / parseInt(bpm)) : 1000}
-                  >
-                    <MaterialCommunityIcons name="cards-heart" size={44} color="#E04644" />
-                  </Animatable.View>
-                  
-                  <View style={styles.bpmTextRow}>
-                    <Text style={styles.bpmValue} numberOfLines={1}>
-                      {bpm === '0' ? '--' : bpm === '-1' ? '...' : bpm}
-                    </Text>
-                    <Text style={styles.bpmUnit}>LPM</Text>
-                  </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+              <View style={styles.connectedStatusBar}>
+                <View style={styles.connectedBadge}>
+                  <Animatable.View animation="pulse" iterationCount="infinite" duration={1400} style={styles.greenPulseDot} />
+                  <Text style={styles.connectedBadgeText}>PULSERA EN LÍNEA</Text>
                 </View>
-
-                <Animatable.View
-                  animation="pulse"
-                  iterationCount="infinite"
-                  duration={1800}
-                  style={styles.ecgContainer}
-                >
-                  <Image
-                    source={require('../assets/ecg_wave.png')}
-                    style={styles.ecgImage}
-                    resizeMode="contain"
-                  />
-                </Animatable.View>
-              </View>
-            </View>
-
-            {/* Fila secundaria: Oxígeno y Batería */}
-            <View style={styles.rowCards}>
-              
-              {/* SpO2 Card */}
-              <View style={[styles.smallCard, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.cardTitle}>Oxígeno</Text>
-
-                <Animatable.View animation={breatheAnim} iterationCount="infinite" duration={2500} style={styles.smallCardIconWrap}>
-                  <MaterialCommunityIcons name="water" size={48} color="#3AB4F2" />
-                </Animatable.View>
-
-                <View style={styles.metricContainer}>
-                  <Text style={styles.smallCardValue}>
-                    {spo2 === '0' ? '--' : spo2 === '-1' ? '...' : spo2}
-                  </Text>
-                  <Text style={styles.smallCardUnit}> %</Text>
-                </View>
+                <TouchableOpacity style={styles.disconnectIconBtn} onPress={disconnectDevice} activeOpacity={0.7}>
+                  <MaterialCommunityIcons name="bluetooth-off" size={16} color={colors.textSoft} style={{ marginRight: 6 }} />
+                  <Text style={styles.disconnectIconText}>Desconectar</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* Batería Card */}
-              <View style={[styles.smallCard, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.cardTitle}>Batería</Text>
+              <VitalsPanel bpm={bpm} spo2={spo2} bateria={bateria} estado={estadoSensor} calibInicioMs={calibInicioMs} />
 
-                <View style={styles.smallCardIconWrap}>
-                  <View style={styles.customBatteryWrap}>
-                    <View style={styles.customBatteryCap} />
-                    <View style={styles.customBatteryBody}>
-                      <View style={[styles.customBatteryBar, { opacity: batBars >= 3 ? 0.45 : 0.15 }]} />
-                      <View style={[styles.customBatteryBar, { opacity: batBars >= 2 ? 1 : 0.2 }]} />
-                      <View style={[styles.customBatteryBar, { opacity: batBars >= 1 ? 1 : 0.2, marginBottom: 0 }]} />
+              {ubicacionProblema && (
+                <Animatable.View animation="fadeInUp" duration={450}>
+                  <TouchableOpacity style={styles.fullscreenCard} onPress={arreglarUbicacion} activeOpacity={0.85}>
+                    <View style={styles.fullscreenIcon}>
+                      <MaterialCommunityIcons name="map-marker-off" size={20} color={colors.danger} />
                     </View>
-                  </View>
-                </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.fullscreenTitle}>
+                        {ubicacionProblema === 'gps' ? 'Activá la ubicación del celular' : 'Permití el acceso a la ubicación'}
+                      </Text>
+                      <Text style={styles.fullscreenText}>Sin ubicación, tu familia no va a poder ver dónde estás si te caés.</Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </Animatable.View>
+              )}
 
-                <View style={styles.metricContainer}>
-                  <Text style={styles.smallCardValue}>{bateria}</Text>
-                  <Text style={styles.smallCardUnit}> %</Text>
-                </View>
+              {!profile.pantallaCompletaConfigurada && (
+                <Animatable.View animation="fadeInUp" duration={450}>
+                  <TouchableOpacity style={styles.fullscreenCard} onPress={configurarPantallaCompleta} activeOpacity={0.85}>
+                    <View style={styles.fullscreenIcon}>
+                      <MaterialCommunityIcons name="cellphone-screenshot" size={20} color={colors.danger} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.fullscreenTitle}>Activá la alerta a pantalla completa</Text>
+                      <Text style={styles.fullscreenText}>Para que una caída se vea en toda la pantalla aunque la app esté cerrada.</Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </Animatable.View>
+              )}
+
+              <View style={styles.familyInfoCard}>
+                <MaterialCommunityIcons name="shield-check-outline" size={20} color={colors.ok} style={{ marginRight: 10 }} />
+                <Text style={styles.familyInfoText}>Tu familia recibe tus signos vitales y será avisada al instante si la pulsera detecta una caída.</Text>
               </View>
-
-            </View>
-
-            {/* Alerta de Caída o SOS */}
-            {(alertaCaida === '1' || alertaSOS === '1') && (
-              <Animatable.View animation="shake" iterationCount="infinite" style={styles.alertCard}>
-                <MaterialCommunityIcons name="alert-octagon" size={32} color="#FFF" />
-                <View style={styles.alertTextGroup}>
-                  <Text style={styles.alertTitle}>ALERTA CRÍTICA</Text>
-                  <Text style={styles.alertDesc}>Se ha notificado al familiar en tiempo real.</Text>
-                </View>
-              </Animatable.View>
-            )}
-
+            </ScrollView>
           </Animatable.View>
         )}
 
       </View>
+
+      </Animatable.View>
+      )}
 
       {/* Modal de Ajustes (contiene versión y actualización de pulsera + acceso al perfil) */}
       <Modal statusBarTranslucent={true} navigationBarTranslucent={true}
@@ -1306,6 +1545,128 @@ export default function PatientScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* Alerta a pantalla completa con la app cerrada */}
+            <TouchableOpacity
+              style={[styles.settingsProfileBtn, { marginBottom: 10 }]}
+              onPress={() => { setShowSettingsModal(false); configurarPantallaCompleta(); }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MaterialCommunityIcons name="cellphone-screenshot" size={20} color={colors.danger} style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.otaCheckBtnText}>Alerta a pantalla completa</Text>
+                  <Text style={styles.settingsHint}>Mostrar la emergencia aunque la app esté cerrada</Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Permitir que Android no cierre la app en segundo plano */}
+            <TouchableOpacity
+              style={[styles.settingsProfileBtn, { marginBottom: 10 }]}
+              onPress={async () => {
+                const restringida = await abrirAjustesBateria();
+                if (!restringida) {
+                  Alert.alert('Listo', 'VitaLink ya puede funcionar en segundo plano. Si tu celular tiene un "ahorro de batería" propio, agregá VitaLink como excepción.');
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MaterialCommunityIcons name="battery-heart-variant" size={20} color={colors.ok} style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.otaCheckBtnText}>Monitoreo en segundo plano</Text>
+                  <Text style={styles.settingsHint}>Evita que Android cierre VitaLink con la pantalla apagada</Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Calibración del detector de caídas (gráfico en vivo y umbrales) */}
+            <TouchableOpacity
+              style={[styles.settingsProfileBtn, { marginBottom: 10 }]}
+              onPress={() => {
+                if (!connected) {
+                  Alert.alert('Pulsera desconectada', 'Conectá la pulsera para calibrar la detección de caídas.');
+                  return;
+                }
+                setShowSettingsModal(false);
+                navigation.navigate('CalibracionCaidas');
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MaterialCommunityIcons name="chart-bell-curve-cumulative" size={20} color={colors.oxygen} style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.otaCheckBtnText}>Calibrar detección de caídas</Text>
+                  <Text style={styles.settingsHint}>Gráfico en vivo del acelerómetro y ajuste de umbrales</Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Calibración del sensor de pulso (onda en vivo y parámetros) */}
+            <TouchableOpacity
+              style={[styles.settingsProfileBtn, { marginBottom: 10 }]}
+              onPress={() => {
+                if (!connected) {
+                  Alert.alert('Pulsera desconectada', 'Conectá la pulsera para calibrar el sensor de pulso.');
+                  return;
+                }
+                setShowSettingsModal(false);
+                navigation.navigate('CalibracionPulso');
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MaterialCommunityIcons name="heart-pulse" size={20} color={colors.heart} style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.otaCheckBtnText}>Calibrar sensor de pulso</Text>
+                  <Text style={styles.settingsHint}>Onda del pulso en vivo y ajuste del sensor</Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {/* Reiniciar la pulsera (por si queda trabada) */}
+            <TouchableOpacity
+              style={[styles.settingsProfileBtn, { marginBottom: 10 }]}
+              onPress={() => {
+                if (!connected) {
+                  Alert.alert(
+                    'Pulsera desconectada',
+                    'Para reiniciarla sin el celular, mantené apretados los dos botones de la pulsera durante 5 segundos hasta que vibre.'
+                  );
+                  return;
+                }
+                Alert.alert(
+                  'Reiniciar pulsera',
+                  'La pulsera se va a apagar y prender. Va a estar desconectada unos segundos y después se vuelve a conectar sola.',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                      text: 'Reiniciar',
+                      style: 'destructive',
+                      onPress: () => {
+                        setShowSettingsModal(false);
+                        escribirEnPulsera('R');
+                      },
+                    },
+                  ]
+                );
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <MaterialCommunityIcons name="restart" size={20} color="#F59E0B" style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.otaCheckBtnText}>Reiniciar pulsera</Text>
+                  <Text style={styles.settingsHint}>Si se traba o no mide bien</Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
             {/* Botón para ir a Editar Perfil / Ficha Médica */}
             <TouchableOpacity
               style={styles.settingsProfileBtn}
@@ -1338,7 +1699,7 @@ export default function PatientScreen({ navigation }) {
       >
         <View style={styles.otaModalOverlay}>
           <Animatable.View animation="zoomIn" duration={350} style={styles.otaModalCard}>
-            
+
             {/* Encabezado del Modal */}
             <View style={styles.otaModalHeader}>
               <View style={styles.otaModalIconCircle}>
@@ -1483,25 +1844,25 @@ export default function PatientScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0D10' },
-  
+  container: { flex: 1, backgroundColor: colors.bg },
+
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 42, paddingBottom: 18 },
   headerContent: { flexDirection: 'row', flex: 1, alignItems: 'center' },
-  backCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  backCircleBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   avatarCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
   headerSubtitle: { color: '#D4A359', fontSize: 12, fontWeight: '700', letterSpacing: 0.6, marginBottom: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', letterSpacing: 0.2, flexShrink: 1 },
   statusDot: { width: 9, height: 9, borderRadius: 4.5, marginLeft: 8, marginTop: 2 },
-  profileBtn: { marginLeft: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
+  profileBtn: { marginLeft: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' },
 
   // Content
   content: { flex: 1, paddingHorizontal: 20 },
 
   // Toast de desconexión
-  disconnectToast: { backgroundColor: '#22252A', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  disconnectToast: { backgroundColor: colors.surface, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   disconnectToastLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   disconnectToastText: { color: '#E04644', fontSize: 13, fontWeight: '600', marginLeft: 10 },
 
@@ -1510,44 +1871,36 @@ const styles = StyleSheet.create({
   radarContainer: { width: 190, height: 190, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   radarRingOuter: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(224, 70, 68, 0.06)', borderWidth: 1, borderColor: 'rgba(224, 70, 68, 0.16)' },
   radarRingInner: { position: 'absolute', width: 134, height: 134, borderRadius: 67, backgroundColor: 'rgba(224, 70, 68, 0.1)', borderWidth: 1, borderColor: 'rgba(224, 70, 68, 0.24)' },
-  radarCore: { width: 92, height: 92, borderRadius: 46, backgroundColor: '#22252A', borderWidth: 2, borderColor: '#E04644', justifyContent: 'center', alignItems: 'center' },
+  radarCore: { width: 92, height: 92, borderRadius: 46, backgroundColor: colors.surface, borderWidth: 2, borderColor: '#E04644', justifyContent: 'center', alignItems: 'center' },
   radarCoreScanning: { borderColor: '#D4A359' },
   notConnectedTitle: { color: '#FFFFFF', fontSize: 23, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
   notConnectedSubtitle: { color: '#9CA3AF', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20, paddingHorizontal: 20 },
   bigConnectBtn: { backgroundColor: '#E04644', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 17, borderRadius: 22 },
   bigConnectBtnActive: { backgroundColor: '#D4A359' },
   bigConnectBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', letterSpacing: 0.6 },
-  hintCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#22252A', borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, marginTop: 22, marginHorizontal: 6 },
+  hintCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 12, marginTop: 22, marginHorizontal: 6 },
   hintText: { color: '#9CA3AF', fontSize: 12, fontWeight: '500', flex: 1 },
 
-  // Barra de estado conectado (2 píldoras como en la imagen)
-  connectedStatusBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  connectedBadge: { flex: 1.45, marginRight: 10, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', paddingHorizontal: 14, borderRadius: 21 },
-  greenPulseDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#43C667', marginRight: 8 },
-  connectedBadgeText: { color: '#43C667', fontSize: 13, fontWeight: '700', letterSpacing: 0.4 },
-  disconnectIconBtn: { flex: 1, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: '#22252A', paddingHorizontal: 14, borderRadius: 21 },
-  disconnectIconText: { color: '#E5E7EB', fontSize: 14, fontWeight: '600' },
+  // Barra de estado conectado
+  connectedStatusBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  connectedBadge: { flex: 1.45, marginRight: 10, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, borderRadius: 21 },
+  greenPulseDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: colors.ok, marginRight: 8 },
+  connectedBadgeText: { color: colors.ok, fontSize: 12.5, fontWeight: '800', letterSpacing: 0.6 },
+  disconnectIconBtn: { flex: 1, height: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, borderRadius: 21 },
+  disconnectIconText: { color: colors.textSoft, fontSize: 13.5, fontWeight: '700' },
 
-  // Títulos de tarjetas
-  cardTitle: { color: '#E8EAED', fontSize: 18, fontWeight: '600', letterSpacing: 0.1 },
-  
-  // Hero Card (Frecuencia Cardíaca)
-  heroCard: { backgroundColor: '#22252A', borderRadius: 22, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, marginBottom: 16 },
-  bpmContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-  bpmLeftGroup: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
-  bpmTextRow: { flexDirection: 'row', alignItems: 'baseline', marginLeft: 12 },
-  bpmValue: { color: '#FFFFFF', fontSize: 34, fontWeight: '600', fontVariant: ['tabular-nums'], includeFontPadding: false },
-  bpmUnit: { color: '#E8EAED', fontSize: 22, fontWeight: '500', marginLeft: 8 },
-  ecgContainer: { flex: 1, alignItems: 'flex-end', justifyContent: 'center', marginLeft: 10 },
-  ecgImage: { width: 155, height: 78 },
+  fullscreenCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, padding: 14, marginTop: 14, borderWidth: 1, borderColor: `${colors.danger}55` },
+  fullscreenIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: `${colors.danger}1F`, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  fullscreenTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  fullscreenText: { color: colors.textMuted, fontSize: 12, fontWeight: '500', lineHeight: 17, marginTop: 2 },
+  settingsHint: { color: colors.textMuted, fontSize: 11.5, fontWeight: '500', marginTop: 2 },
+  familyInfoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, padding: 14, marginTop: 14, borderWidth: 1, borderColor: colors.border },
+  familyInfoText: { color: colors.textMuted, fontSize: 12.5, fontWeight: '500', flex: 1, lineHeight: 18 },
 
-  // Row Cards (Oxígeno y Batería)
-  rowCards: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  smallCard: { backgroundColor: '#22252A', borderRadius: 22, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 22, minHeight: 175, justifyContent: 'space-between' },
-  smallCardIconWrap: { alignSelf: 'flex-start', marginVertical: 12 },
-  metricContainer: { flexDirection: 'row', alignItems: 'baseline' },
-  smallCardValue: { color: '#FFFFFF', fontSize: 34, fontWeight: '600', fontVariant: ['tabular-nums'], includeFontPadding: false },
-  smallCardUnit: { color: '#FFFFFF', fontSize: 30, fontWeight: '500' },
+  // Modo emergencia (pantalla completa)
+  emergencyContainer: { flex: 1, paddingHorizontal: 22, paddingTop: 44, paddingBottom: 30 },
+  emergencyNotice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  emergencyNoticeText: { color: 'rgba(255,255,255,0.7)', fontSize: 12.5, fontWeight: '600' },
 
   // Ícono de batería personalizado igual a la referencia
   customBatteryWrap: { alignItems: 'center', marginLeft: 4 },
@@ -1562,38 +1915,38 @@ const styles = StyleSheet.create({
   alertDesc: { color: 'rgba(255,255,255,0.88)', fontSize: 13, fontWeight: '500', marginTop: 2 },
 
   // Sección OTA en Ajustes
-  otaSectionCard: { backgroundColor: '#191C20', borderRadius: 18, padding: 16, marginTop: 4 },
+  otaSectionCard: { backgroundColor: colors.bg, borderRadius: 18, padding: 16, marginTop: 4 },
   otaVersionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   otaVersionBadge: { flexDirection: 'row', alignItems: 'center' },
   otaVersionText: { color: '#9CA3AF', fontSize: 13, fontWeight: '600' },
   otaVersionHighlight: { color: '#FFFFFF', fontWeight: '800' },
-  otaCheckBtn: { backgroundColor: '#2A2E35', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  otaCheckBtn: { backgroundColor: colors.surfaceRaised, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   otaCheckBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  settingsProfileBtn: { backgroundColor: '#191C20', borderRadius: 16, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  settingsProfileBtn: { backgroundColor: colors.bg, borderRadius: 16, paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 
   // Modal OTA & Ajustes
   otaModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.78)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  otaModalCard: { width: '100%', backgroundColor: '#22252A', borderRadius: 24, padding: 22 },
+  otaModalCard: { width: '100%', backgroundColor: colors.surface, borderRadius: 24, padding: 22 },
   otaModalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  otaModalIconCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#191C20', justifyContent: 'center', alignItems: 'center' },
+  otaModalIconCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' },
   otaModalTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   otaModalSubtitle: { color: '#9CA3AF', fontSize: 12, fontWeight: '500', marginTop: 2 },
   otaStateCenter: { alignItems: 'center', paddingVertical: 12 },
   otaMessageText: { color: '#D1D5DB', fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 20 },
-  otaReleaseBox: { backgroundColor: '#191C20', borderRadius: 16, padding: 16, marginBottom: 18 },
+  otaReleaseBox: { backgroundColor: colors.bg, borderRadius: 16, padding: 16, marginBottom: 18 },
   otaReleaseHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   otaReleaseTag: { color: '#E04644', fontSize: 12, fontWeight: '800', letterSpacing: 0.6 },
   otaReleaseNotesTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '700', marginBottom: 4 },
   otaReleaseNotesText: { color: '#9CA3AF', fontSize: 13, lineHeight: 19 },
   otaPrimaryBtn: { backgroundColor: '#E04644', borderRadius: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   otaPrimaryBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  otaSecondaryBtn: { backgroundColor: '#2A2E35', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16, alignItems: 'center', justifyContent: 'center' },
+  otaSecondaryBtn: { backgroundColor: colors.surfaceRaised, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 24, marginTop: 16, alignItems: 'center', justifyContent: 'center' },
   otaSecondaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   otaProgressWrapper: { paddingVertical: 8 },
   otaProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   otaProgressLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   otaProgressPercent: { color: '#E04644', fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  otaProgressBarBg: { width: '100%', height: 10, backgroundColor: '#191C20', borderRadius: 5, overflow: 'hidden', marginBottom: 14 },
+  otaProgressBarBg: { width: '100%', height: 10, backgroundColor: colors.bg, borderRadius: 5, overflow: 'hidden', marginBottom: 14 },
   otaProgressBarFill: { height: '100%', backgroundColor: '#E04644', borderRadius: 5 },
   otaErrorActions: { flexDirection: 'row', width: '100%', marginTop: 16, alignItems: 'center' },
 });

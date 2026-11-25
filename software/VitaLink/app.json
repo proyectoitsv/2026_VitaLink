@@ -2,6 +2,7 @@
   "expo": {
     "name": "VitaLink",
     "slug": "VitaLink",
+    "scheme": "vitalink",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -32,6 +33,8 @@
     "plugins": [
       "expo-dev-client",
       "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      "./plugins/withVitaLinkAndroid",
       [
         "react-native-ble-plx",
         {
@@ -42,7 +45,9 @@
           ],
           "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to the VitaLink bracelet"
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-asset"
     ]
   }
 }

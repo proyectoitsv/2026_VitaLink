@@ -250,7 +250,7 @@ export default function ProfileScreen({ navigation }) {
                       key={av.id} 
                       style={[
                         styles.avatarCompactItem, 
-                        isSelected && { borderColor: '#43C667', backgroundColor: '#181A1F' }
+                        isSelected && { borderColor: '#43C667', backgroundColor: '#0F1114' }
                       ]} 
                       onPress={() => {
                         handleSelectAvatar(av.id);
@@ -402,7 +402,7 @@ export default function ProfileScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0D10' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 42, paddingHorizontal: 20, paddingBottom: 15 },
-  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#22252A', justifyContent: 'center', alignItems: 'center' },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#17191E', justifyContent: 'center', alignItems: 'center' },
   headerCategory: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 2 },
   headerTitle: { color: '#FFF', fontSize: 20, fontWeight: '700' },
   saveHeaderBtn: { backgroundColor: '#E04644', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16 },
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
   
   scrollContent: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 60 },
 
-  card: { backgroundColor: '#22252A', borderRadius: 22, padding: 20, marginBottom: 16 },
+  card: { backgroundColor: '#17191E', borderRadius: 22, padding: 20, marginBottom: 16 },
   sectionLabel: { color: '#D4A359', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, marginBottom: 12 },
   sectionDesc: { color: '#9CA3AF', fontSize: 13, lineHeight: 19, marginBottom: 16 },
 
@@ -422,28 +422,28 @@ const styles = StyleSheet.create({
 
   // Photo Action Buttons
   photoActionsRow: { flexDirection: 'row', gap: 10, marginTop: 10, marginBottom: 4 },
-  photoActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#181A1F', paddingVertical: 12, borderRadius: 14 },
+  photoActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0F1114', paddingVertical: 12, borderRadius: 14 },
   photoActionBtnText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
   removePhotoBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginTop: 4 },
   removePhotoBtnText: { color: '#9CA3AF', fontSize: 12, fontWeight: '600' },
 
   // Dropdown for Avatars
-  dropdownToggleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#181A1F', paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginTop: 10 },
+  dropdownToggleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0F1114', paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, marginTop: 10 },
   dropdownToggleBtnActive: { borderWidth: 1, borderColor: '#D4A359' },
   dropdownToggleText: { color: '#E5E7EB', fontSize: 13, fontWeight: '600' },
   dropdownContent: { marginTop: 10, paddingVertical: 4 },
   avatarHorizontalScroll: { paddingVertical: 4, gap: 10 },
-  avatarCompactItem: { width: 76, backgroundColor: '#181A1F', borderRadius: 14, paddingVertical: 10, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
+  avatarCompactItem: { width: 76, backgroundColor: '#0F1114', borderRadius: 14, paddingVertical: 10, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
   avatarLabel: { color: '#9CA3AF', fontSize: 10, fontWeight: '600', marginTop: 4 },
 
   // Inputs
   row: { flexDirection: 'row' },
   inputLabel: { color: '#E8EAED', fontSize: 13, fontWeight: '600', marginBottom: 6 },
-  input: { backgroundColor: '#181A1F', color: '#FFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, marginBottom: 14 },
+  input: { backgroundColor: '#0F1114', color: '#FFF', fontSize: 15, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, marginBottom: 14 },
 
   // Code & QR
   codeText: { color: '#E04644', fontSize: 30, fontWeight: '800', letterSpacing: 3, marginBottom: 6 },
-  qrWrapper: { alignSelf: 'center', padding: 14, backgroundColor: '#181A1F', borderRadius: 18, marginTop: 6 },
+  qrWrapper: { alignSelf: 'center', padding: 14, backgroundColor: '#0F1114', borderRadius: 18, marginTop: 6 },
   qrImage: { width: 200, height: 200 },
 
   // Buttons
