@@ -304,6 +304,314 @@ void TaskMPU6050(void *pvParameters) {
     }
 }
 
+static void pulsoMotor(int encendidoMs, int apagadoMs) {
+    digitalWrite(PIN_MOTOR, HIGH);
+    vTaskDelay(pdMS_TO_TICKS(encendidoMs));
+    digitalWrite(PIN_MOTOR, LOW);
+    vTaskDelay(pdMS_TO_TICKS(apagadoMs));
+}
+
+// Pulso de la alarma: se corta antes si llega otro patron
+static void pulsoAlarma(int encendidoMs, int apagadoMs) {
+    digitalWrite(PIN_MOTOR, HIGH);
+    vTaskDelay(pdMS_TO_TICKS(encendidoMs));
+    digitalWrite(PIN_MOTOR, LOW);
+    for (int t = 0; t < apagadoMs; t += 50) {
+        if (patronMotor != MOTOR_NINGUNO || !alarmaVibrando() || estaActualizandoOTA()) return;
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+void TaskMotor(void *pvParameters) {
+    esp_task_wdt_add(NULL);
+    while (1) {
+        esp_task_wdt_reset();
+
+        if (estaActualizandoOTA()) {
+            digitalWrite(PIN_MOTOR, LOW);
+            patronMotor = MOTOR_NINGUNO;
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
+        }
+
+        uint8_t patron = patronMotor;
+        patronMotor = MOTOR_NINGUNO;
+
+        // Los avisos de los toques tienen prioridad (son cortos)
+        if (patron == MOTOR_TOQUE) {
+            pulsoMotor(45, 40);
+        } else if (patron == MOTOR_SOS) {
+            pulsoMotor(1500, 150);
+        } else if (patron == MOTOR_CONFIRMAR) {
+            for (int i = 0; i < 3; i++) pulsoMotor(110, 110);
+        } else if (patron == MOTOR_ERROR) {
+            pulsoMotor(400, 200);
+            pulsoMotor(400, 100);
+        } else if (alarmaVibrando()) {
+            // Aviso en curso: vibrar en pulsos hasta que se cancele
+            if (avisoVisto()) pulsoAlarma(200, 2800);
+            else pulsoAlarma(400, 600);
+        } else {
+            digitalWrite(PIN_MOTOR, LOW);
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+    }
+}
+
+// Estado de un pad tactil con su calibracion
+struct PadTactil {
+    uint8_t pin;
+    const char* clave;      // nombre en la memoria permanente
+    float base;
+    float ultimaGuardada;
+    bool tocado;
+    uint8_t muestrasArriba; // lecturas seguidas por encima del umbral (antirrebote)
+    float baseLibre;        // base sin cargador (de ella salen los umbrales)
+    unsigned long tocadoDesde;
+    unsigned long ultimoLog; // diagnostico (DEPURAR_TACTIL)
+    float maxRel;            // subida maxima desde el ultimo diagnostico
+};
+
+// Devuelve true al soltar un toque corto
+static bool leerPad(PadTactil &pad, unsigned long &sinTocarDesde, unsigned long ahora, bool enCargador) {
+    float v = (float)touchRead(pad.pin);
+    // Se saco el cargador: la lectura cae muy por debajo de la base y la base baja de golpe
+    if (pad.base > 0 && v < pad.base * CAIDA_BASE_REL) {
+        pad.base = v;
+        pad.tocado = false;
+        pad.muestrasArriba = 0;
+        return false;
+    }
+    float escala = pad.baseLibre > 0 ? pad.baseLibre : pad.base;
+    float rel = escala > 0 ? 1.0f + (v - pad.base) / escala : 1.0f;
+    // La base sigue lentamente a la humedad y la temperatura
+    if (!pad.tocado && rel < UMBRAL_TACTIL_REPOSO) pad.base = pad.base * 0.995f + v * 0.005f;
+    if (!enCargador) pad.baseLibre = pad.base;
+    // Diagnostico: 5 veces por segundo, lectura, base actual, base sin cargador y cuanto subio
+    if (rel > pad.maxRel) pad.maxRel = rel;
+    if (DEPURAR_TACTIL && ahora - pad.ultimoLog >= 200) {
+        pad.ultimoLog = ahora;
+        // Diagnostico del pad S.O.S. por Bluetooth
+        if (pad.pin == PIN_TACTIL_SOS) {
+            char diag[24];
+            float b = escala > 0 ? (pad.base / escala - 1.0f) * 100.0f : 0;
+            snprintf(diag, sizeof(diag), "%+.0f/%+.0f B%+.0f T%dC%d", (rel - 1.0f) * 100.0f, (pad.maxRel - 1.0f) * 100.0f,
+                     b, pad.tocado ? 1 : 0, enCargador ? 1 : 0);
+            enviarDiagnosticoTactilBLE(diag);
+        }
+        pad.maxRel = 0;
+    }
+
+    if (!pad.tocado) {
+        pad.muestrasArriba = rel > UMBRAL_TACTIL_TOQUE ? pad.muestrasArriba + 1 : 0;
+        if (pad.muestrasArriba >= MUESTRAS_TOQUE_MIN) {
+            pad.tocado = true;
+            pad.tocadoDesde = ahora;
+            pad.muestrasArriba = 0;
+        }
+    } else if (rel < UMBRAL_TACTIL_SUELTA) {
+        pad.tocado = false;
+        sinTocarDesde = ahora;
+        if (ahora - pad.tocadoDesde <= TOQUE_MAX_MS) return true;
+    }
+    return false;
+}
+
+// Toma la lectura actual como nueva base (cargador recien apoyado). No toca baseLibre.
+static void rebasearPad(PadTactil &pad) {
+    float suma = 0;
+    for (int i = 0; i < 5; i++) {
+        suma += touchRead(pad.pin);
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    pad.base = suma / 5.0f;
+    pad.tocado = false;
+    pad.muestrasArriba = 0;
+}
+
+static void calibrarPad(PadTactil &pad, Preferences &prefs) {
+    float medida = 0;
+    for (int i = 0; i < 20; i++) {
+        medida += touchRead(pad.pin);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    medida /= 20.0f;
+    float guardada = prefs.getFloat(pad.clave, 0.0f);
+    // Si al encender alguien esta tocando el pad, la medicion sale alta: se usa la guardada
+    pad.base = (guardada > 0 && medida > guardada * UMBRAL_TACTIL_TOQUE) ? guardada : medida;
+    pad.ultimaGuardada = guardada;
+}
+
+void TaskTactil(void *pvParameters) {
+    Preferences prefs;
+    prefs.begin("tactil", false);
+
+    PadTactil sos = { PIN_TACTIL_SOS, "base_sos", 0, 0, false, 0 };
+    PadTactil cancelar = { PIN_TACTIL_CANCELAR, "base_cancelar", 0, 0, false, 0 };
+    calibrarPad(sos, prefs);
+    calibrarPad(cancelar, prefs);
+    sos.baseLibre = sos.base;
+    cancelar.baseLibre = cancelar.base;
+    baseTactilSOS = sos.base;
+    bool enCargador = false;   // el cargador esta apoyado sobre los pads
+
+    unsigned long ultimoGuardado = 0;
+    unsigned long sinTocarDesde = millis();
+    int toquesSOS = 0;
+    unsigned long ultimoToqueSOS = 0;
+    unsigned long sosEnviadoEn = 0;
+    unsigned long sosPendienteDesde = 0;
+    unsigned long ambosTocadosDesde = 0;   // para el reinicio manteniendo los dos pads
+    bool reinicioPedido = false;
+    unsigned long reinicioArmadoEn = 0;    // vibro avisando el reinicio: se espera que suelten los pads
+    // Si la desperto un toque en el pad S.O.S., ese toque cuenta como el primero de los tres
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TOUCHPAD) {
+        toquesSOS = 1;
+        ultimoToqueSOS = millis();
+        patronMotor = MOTOR_TOQUE;
+        // El dedo que la desperto puede seguir apoyado: al soltarlo no tiene que contar otra vez
+        sos.tocado = true;
+        sos.tocadoDesde = millis() - TOQUE_MAX_MS - 1;
+    }
+    esp_task_wdt_add(NULL);
+
+    while (1) {
+        esp_task_wdt_reset();
+        unsigned long ahora = millis();
+
+        bool toqueSOS = leerPad(sos, sinTocarDesde, ahora, enCargador);
+        bool toqueCancelar = leerPad(cancelar, sinTocarDesde, ahora, enCargador);
+
+        // ---- Cargador apoyado: los dos pads suben casi a la vez y no se sueltan ----
+        if (sos.tocado && cancelar.tocado) {
+            unsigned long primero = min(sos.tocadoDesde, cancelar.tocadoDesde);
+            unsigned long ultimo = max(sos.tocadoDesde, cancelar.tocadoDesde);
+            if (ultimo - primero <= VENTANA_APOYO_MS && ahora - ultimo >= ESPERA_APOYO_MS) {
+                rebasearPad(sos);
+                rebasearPad(cancelar);
+                enCargador = true;
+                ambosTocadosDesde = 0;   // no es el gesto de reinicio
+                toqueSOS = toqueCancelar = false;
+            }
+        }
+        // Un solo pad apretado mas de 2 s: es el cargador, no un dedo
+        PadTactil* padsTrabados[2] = { &sos, &cancelar };
+        for (PadTactil* pad : padsTrabados) {
+            if (pad->tocado && !(sos.tocado && cancelar.tocado) && ahora - pad->tocadoDesde >= TIEMPO_PAD_TRABADO_MS) {
+                rebasearPad(*pad);
+                enCargador = true;
+            }
+        }
+        // Se saco el cargador: las bases volvieron a la normalidad
+        if (enCargador && sos.base < sos.baseLibre * 1.05f && cancelar.base < cancelar.baseLibre * 1.05f) {
+            enCargador = false;
+        }
+
+        if (!estaActualizandoOTA()) {
+            // ---- Pad CANCELAR: corta la vibracion y cancela la alerta (pulsera y app) ----
+            if (toqueCancelar) {
+                // Sin un aviso en curso (caida o S.O.S.), el boton no hace nada: ni vibra ni avisa
+                if (hayAvisoActivo()) {
+                    cancelarAlarmaCaida();
+                    enviarCancelacionCaidaBLE();   // la app cierra la alerta activa
+                    patronMotor = MOTOR_CONFIRMAR;
+                }
+                toquesSOS = 0;
+            }
+
+            // ---- Pad S.O.S.: tres toques seguidos piden ayuda ----
+            if (toqueSOS && !alarmaVibrando()) {
+                if (ahora - ultimoToqueSOS > VENTANA_ENTRE_TOQUES_MS) toquesSOS = 0;
+                toquesSOS++;
+                ultimoToqueSOS = ahora;
+
+                if (toquesSOS < TOQUES_SOS) {
+                    patronMotor = MOTOR_TOQUE;
+                } else {
+                    toquesSOS = 0;
+                    if (dispositivoConectado) {
+                        enviarAlertaSOSBLE(true);
+                        marcarAvisoActivo();       // el boton Cancelar ya puede cerrarlo
+                        sosEnviadoEn = ahora;
+                        patronMotor = MOTOR_SOS;
+                    } else {
+                        // Sin celular: queda pendiente y se envia apenas se conecte
+                        sosPendiente = true;
+                        sosPendienteDesde = ahora;
+                        anunciarRapidoBLE();
+                        patronMotor = MOTOR_ERROR;
+                    }
+                }
+            }
+        }
+
+        // Reinicio: mantener los dos pads 5 segundos y soltarlos
+        if (sos.tocado && cancelar.tocado && !estaActualizandoOTA() && !reinicioPedido) {
+            if (ambosTocadosDesde == 0) ambosTocadosDesde = ahora;
+            if (reinicioArmadoEn == 0 && ahora - ambosTocadosDesde >= TIEMPO_REINICIO_TACTIL_MS) {
+                reinicioArmadoEn = ahora;
+                toquesSOS = 0;
+                patronMotor = MOTOR_SOS;            // vibracion larga = solta los pads para reiniciar
+            }
+        } else {
+            ambosTocadosDesde = 0;
+        }
+        if (reinicioArmadoEn != 0 && !reinicioPedido) {
+            if (!sos.tocado && !cancelar.tocado) {
+                vTaskDelay(pdMS_TO_TICKS(300));
+                pedirReinicioPulsera();
+                reinicioPedido = true;   // no repetir mientras se espera el reinicio
+            } else if (ahora - reinicioArmadoEn >= ESPERA_SOLTAR_MS) {
+                rebasearPad(sos);
+                rebasearPad(cancelar);
+                enCargador = true;
+                reinicioArmadoEn = 0;
+                ambosTocadosDesde = 0;
+            }
+        }
+
+        // S.O.S. pendiente: enviarlo cuando la app ya este escuchando, o descartarlo si paso mucho
+        if (sosPendiente) {
+            if (dispositivoConectado && tiempoConectadoBLE() >= SOS_ESPERA_CONEXION_MS && !estaActualizandoOTA()) {
+                sosPendiente = false;
+                enviarAlertaSOSBLE(true);
+                marcarAvisoActivo();
+                sosEnviadoEn = ahora;
+                patronMotor = MOTOR_SOS;
+            } else if (ahora - sosPendienteDesde >= SOS_PENDIENTE_MAX_MS) {
+                sosPendiente = false;
+            }
+        }
+
+        // Si pasa demasiado tiempo entre toques, la cuenta vuelve a cero
+        if (toquesSOS > 0 && ahora - ultimoToqueSOS > VENTANA_ENTRE_TOQUES_MS) toquesSOS = 0;
+
+        // Volver el S.O.S. a 0 para que se pueda enviar otro mas adelante
+        if (sosEnviadoEn != 0 && ahora - sosEnviadoEn >= 2000) {
+            enviarAlertaSOSBLE(false);
+            sosEnviadoEn = 0;
+        }
+
+        // Guardar la calibracion cuando lleva un minuto sin tocarse y cambio lo suficiente
+        if (!enCargador && !sos.tocado && !cancelar.tocado && ahora - sinTocarDesde > 60000UL &&
+            (ultimoGuardado == 0 || ahora - ultimoGuardado > TACTIL_GUARDAR_CADA_MS)) {
+            PadTactil* pads[2] = { &sos, &cancelar };
+            for (PadTactil* pad : pads) {
+                bool cambio = pad->ultimaGuardada <= 0 ||
+                              fabsf(pad->base - pad->ultimaGuardada) / pad->ultimaGuardada > TACTIL_CAMBIO_MIN;
+                if (cambio) {
+                    prefs.putFloat(pad->clave, pad->base);
+                    pad->ultimaGuardada = pad->base;
+                }
+            }
+            ultimoGuardado = ahora;
+        }
+
+        // Sin celular los pads se leen mas despacio
+        vTaskDelay(pdMS_TO_TICKS((dispositivoConectado || toquesSOS > 0) ? PERIODO_TACTIL_MS : 50));
+    }
+}
+
 void setup() {
     // Reducir frecuencia del procesador de 240MHz a 80MHz para ahorrar bateria
     setCpuFrequencyMhz(80);
@@ -319,12 +627,13 @@ void setup() {
     // Crear el Mutex para el I2C
     i2cMutex = xSemaphoreCreateMutex();
     if (i2cMutex == NULL) {
-        Serial.println("Error: No se pudo crear el Mutex I2C");
         while (1); // Detener sistema si falla el RTOS
     }
 
     // Inicializar lectura de bateria
-    inicializarModulo();
+    if (SENSAR_BATERIA) {
+        inicializarModulo();
+    }
 
     // Inicializar sensor MAX30102 y detector de caidas MPU6050
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
@@ -336,10 +645,16 @@ void setup() {
     // Inicializar servidor Bluetooth y servicio OTA
     inicializarBLE();
 
+    // Inicializar pin del motor vibrador
+    pinMode(PIN_MOTOR, OUTPUT);
+    digitalWrite(PIN_MOTOR, LOW);
+
     // Crear tareas en sus respectivos nucleos
-    xTaskCreatePinnedToCore(TaskBLE, "TareaBLE", 4096, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(TaskBLE, "TareaBLE", 6144, NULL, 1, NULL, 0); // mas pila: procesa los comandos de calibracion
     xTaskCreatePinnedToCore(TaskMAX30102, "TareaMAX30102", 4096, NULL, 1, NULL, 1);
     xTaskCreatePinnedToCore(TaskMPU6050, "TareaMPU6050", 4096, NULL, 1, NULL, 1);
+    xTaskCreatePinnedToCore(TaskMotor, "TareaMotor", 2048, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(TaskTactil, "TareaTactil", 3072, NULL, 1, NULL, 0);
 }
 
 void loop() {
