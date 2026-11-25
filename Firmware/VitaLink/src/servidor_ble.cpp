@@ -175,6 +175,132 @@ class CallbacksOTAControl: public BLECharacteristicCallbacks {
     }
 };
 
+// Comandos de la app en el canal de caida: V = visto, X = cancelada, R = reiniciar
+class CallbacksCaida: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) {
+        uint8_t* pData = pCharacteristic->getData();
+        size_t len = pCharacteristic->getLength();
+        if (pData == NULL || len == 0) return;
+        if (pData[0] == 'V') {
+            detenerVibracionAlarma();
+        } else if (pData[0] == 'X') {
+            cancelarAlarmaCaida();
+        } else if (pData[0] == 'R') {
+            // No se reinicia aca: primero hay que responderle a la app que la escritura llego
+            pedirReinicioPulsera();
+        }
+    }
+};
+
+// Comandos de calibracion: se encolan y los procesa TaskBLE
+#define LARGO_COMANDO_CALIB 128
+static QueueHandle_t colaComandosCalib = NULL;
+
+class CallbacksCalibConfig: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) {
+        uint8_t* pData = pCharacteristic->getData();
+        size_t len = pCharacteristic->getLength();
+        if (pData == NULL || len == 0 || colaComandosCalib == NULL) return;
+        char cmd[LARGO_COMANDO_CALIB];
+        size_t n = len < sizeof(cmd) - 1 ? len : sizeof(cmd) - 1;
+        memcpy(cmd, pData, n);
+        cmd[n] = '\0';
+        xQueueSend(colaComandosCalib, cmd, 0); // si la cola esta llena, se descarta (llega otro enseguida)
+    }
+};
+
+// Comandos del sensor de pulso (con el prefijo M)
+class CallbacksMaxConfig: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic* pCharacteristic) {
+        uint8_t* pData = pCharacteristic->getData();
+        size_t len = pCharacteristic->getLength();
+        if (pData == NULL || len == 0 || colaComandosCalib == NULL) return;
+        char cmd[LARGO_COMANDO_CALIB];
+        size_t n = len < sizeof(cmd) - 2 ? len : sizeof(cmd) - 2;
+        cmd[0] = 'M';
+        memcpy(cmd + 1, pData, n);
+        cmd[n + 1] = '\0';
+        xQueueSend(colaComandosCalib, cmd, 0);
+    }
+};
+
+static void procesarComandoMax(char* cmd) {
+    if (strncmp(cmd, "SET ", 4) == 0) {
+        ConfigMAX c = obtenerConfigMAX();
+        char* par = strtok(cmd + 4, ";");
+        while (par != NULL) {
+            char* igual = strchr(par, '=');
+            if (igual != NULL) {
+                *igual = '\0';
+                float v = atof(igual + 1);
+                if (strcmp(par, "led") == 0) c.led = (uint8_t)v;
+                else if (strcmp(par, "prom") == 0) c.promedio = (uint8_t)v;
+                else if (strcmp(par, "sens") == 0) c.sensBase = v;
+                else if (strcmp(par, "smax") == 0) c.sensMax = v;
+                else if (strcmp(par, "amp") == 0) c.amplitudMax = v;
+                else if (strcmp(par, "pulsera") == 0) c.umbralPulsera = (uint32_t)v;
+                else if (strcmp(par, "bmin") == 0) c.bpmMin = (uint8_t)v;
+                else if (strcmp(par, "bmax") == 0) c.bpmMax = (uint8_t)v;
+                else if (strcmp(par, "sa") == 0) c.spo2A = v;
+                else if (strcmp(par, "sb") == 0) c.spo2B = v;
+            }
+            par = strtok(NULL, ";");
+        }
+        aplicarConfigMAX(c);
+    } else if (strcmp(cmd, "SAVE") == 0) {
+        guardarConfigMAX();
+    } else if (strcmp(cmd, "RESET") == 0) {
+        restaurarConfigMAX();
+    } else if (strcmp(cmd, "STREAM 1") == 0) {
+        activarCalibracionMAX(true);
+    } else if (strcmp(cmd, "STREAM 0") == 0) {
+        activarCalibracionMAX(false);
+    }
+    publicarConfigMax(true);
+}
+
+// Se llama desde TaskBLE: procesa los comandos de calibracion pendientes
+void procesarComandosBLE() {
+    if (colaComandosCalib == NULL) return;
+    char cmd[LARGO_COMANDO_CALIB];
+    while (xQueueReceive(colaComandosCalib, cmd, 0) == pdTRUE) {
+        if (cmd[0] == 'M') {          // comando del sensor de pulso
+            procesarComandoMax(cmd + 1);
+            continue;
+        }
+        if (strncmp(cmd, "SET ", 4) == 0) {
+            ConfigCaidas c = obtenerConfigCaidas();
+            char* resto = cmd + 4;
+            char* par = strtok(resto, ";");
+            while (par != NULL) {
+                char* igual = strchr(par, '=');
+                if (igual != NULL) {
+                    *igual = '\0';
+                    float v = atof(igual + 1);
+                    if (strcmp(par, "libre") == 0) c.caidaLibreG = v;
+                    else if (strcmp(par, "impacto") == 0) c.impactoG = v;
+                    else if (strcmp(par, "vmin") == 0) c.ventanaMinMs = (uint16_t)v;
+                    else if (strcmp(par, "ventana") == 0) c.ventanaMs = (uint16_t)v;
+                    else if (strcmp(par, "quieto") == 0) c.quietoG = v;
+                    else if (strcmp(par, "prop") == 0) c.proporcionQuieto = v;
+                    else if (strcmp(par, "conf") == 0) c.confirmacionMs = (uint16_t)v;
+                }
+                par = strtok(NULL, ";");
+            }
+            aplicarConfigCaidas(c);
+        } else if (strcmp(cmd, "SAVE") == 0) {
+            guardarConfigCaidas();
+        } else if (strcmp(cmd, "RESET") == 0) {
+            restaurarConfigCaidas();
+        } else if (strcmp(cmd, "STREAM 1") == 0) {
+            activarModoCalibracion(true);
+        } else if (strcmp(cmd, "STREAM 0") == 0) {
+            activarModoCalibracion(false);
+        }
+        publicarConfigCaidas(true); // la app recibe los valores efectivamente aplicados
+    }
+}
+
 class CallbacksOTADatos: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* pCharacteristic) {
         uint8_t* pData = pCharacteristic->getData();
@@ -285,10 +411,22 @@ void pedirReinicioPulsera() {
 }
 
 void manejarDesconexionBLE() {
+    if (pedidoReinicioEn != 0 && millis() - pedidoReinicioEn >= 500) {
+        ESP.restart();
+    }
     if (!dispositivoConectado && dispositivoDesconectandose) {
         delay(500); // Pequeño tiempo para que el hardware se acomode
-        pServer->startAdvertising(); 
+        configurarAnuncio(false);   // anuncio rapido para reconectar enseguida
         dispositivoDesconectandose = false;
+    }
+    // S.O.S. esperando celular: volver al anuncio rapido para que se conecte cuanto antes
+    if (pedidoAnuncioRapido) {
+        pedidoAnuncioRapido = false;
+        if (!dispositivoConectado) configurarAnuncio(false);
+    }
+    // Sin celular durante un minuto: anunciar mas espaciado para gastar menos
+    if (!dispositivoConectado && !anuncioLento && millis() - inicioAnuncio >= ANUNCIO_RAPIDO_MS) {
+        configurarAnuncio(true);
     }
     if (dispositivoConectado && !versionInicialEnviadaBLE && (millis() - instanteConexionBLE >= 2500)) {
         versionInicialEnviadaBLE = true;
