@@ -116,6 +116,9 @@ class MisCallbacksServidor: public BLEServerCallbacks {
         instanteConexionBLE = millis();
         versionInicialEnviadaBLE = false;
         dispositivoConectado = true;
+        // Pedir un intervalo de conexion que gaste menos bateria (el celular puede ajustarlo)
+        pServer->updateConnParams(param->connect.remote_bda, CONEXION_INTERVALO_MIN, CONEXION_INTERVALO_MAX,
+                                  CONEXION_LATENCIA, CONEXION_TIMEOUT);
         if (pCharOTAVersion != NULL) {
             pCharOTAVersion->setValue((uint8_t*)VERSION_FIRMWARE, strlen(VERSION_FIRMWARE));
         }
@@ -130,7 +133,7 @@ class MisCallbacksServidor: public BLEServerCallbacks {
         dispositivoDesconectandose = true;
         if (estaActualizandoOTA()) {
             cancelarActualizacionOTA();
-            BLEDevice::setPower(ESP_PWR_LVL_N0);
+            BLEDevice::setPower(POTENCIA_BLE_NORMAL);
         }
     }
 };
@@ -160,13 +163,13 @@ class CallbacksOTAControl: public BLECharacteristicCallbacks {
             if (finalizarActualizacionOTA()) {
                 enviarEstadoOTABLE("OK");
             } else {
-                BLEDevice::setPower(ESP_PWR_LVL_N0);
+                BLEDevice::setPower(POTENCIA_BLE_NORMAL);
                 enviarEstadoOTABLE("ERR_END");
             }
         }
         else if (strncmp(comando, "ABORT", 5) == 0) {
             cancelarActualizacionOTA();
-            BLEDevice::setPower(ESP_PWR_LVL_N0);
+            BLEDevice::setPower(POTENCIA_BLE_NORMAL);
             enviarEstadoOTABLE("ABORTED");
         }
     }
@@ -272,7 +275,13 @@ void inicializarBLE() {
     pAdvertising->addServiceUUID(SERVICIO_VITALINK_UUID);
     pAdvertising->setAppearance(192); // Generic Watch
     pAdvertising->setScanResponse(true);
-    BLEDevice::startAdvertising(); 
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMaxPreferred(0x12);
+    configurarAnuncio(false);
+}
+
+void pedirReinicioPulsera() {
+    if (pedidoReinicioEn == 0) pedidoReinicioEn = millis() | 1;
 }
 
 void manejarDesconexionBLE() {
