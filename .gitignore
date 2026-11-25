@@ -14,3 +14,31 @@ web-build/
 
 # Local docs
 CONTEXTO_PROYECTO.md
+
+# ---- Aplicacion movil ----
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+expo-debug.*
+# Android
+.gradle/
+build/
+local.properties
+*.iml
+android/app/build/
+android/.gradle/
+android/app/.cxx/
+# Web / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+# Firebase
+firebase-debug.log
+.firebase/
+# APK de prueba del modo demo
+demo-build/

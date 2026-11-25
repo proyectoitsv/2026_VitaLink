@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1019914670401",
+    "project_id": "vitalink-app-92745",
+    "storage_bucket": "vitalink-app-92745.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1019914670401:android:cfa85dd9d88aca7498d1c0",
+        "android_client_info": {
+          "package_name": "com.anonymous.VitaLink"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9Jsi1XzjLyke8FZBUO22SHthmbvK2evY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
