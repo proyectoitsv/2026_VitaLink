@@ -142,6 +142,7 @@ void TaskBLE(void *pvParameters) {
 
 void TaskMAX30102(void *pvParameters) {
     unsigned long ultimoDestello = 0;
+    unsigned long sinMunecaDesde = millis();
     unsigned long inicioMedicion = 0;
     unsigned long inicioDescanso = 0;
     unsigned long ultimoEnvioBLE = 0;
@@ -163,15 +164,37 @@ void TaskMAX30102(void *pvParameters) {
             continue;
         }
 
+        // Modo calibracion (pantalla de la app): el sensor mide sin pausas
+        if (estaSensorDormido() && enCalibracionMAX()) {
+            if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+                despertarSensorMAX();
+                xSemaphoreGive(i2cMutex);
+            }
+            inicioMedicion = millis();
+            ultimoEnvioBLE = millis();
+        }
+
         // Modo dormido: destello infrarrojo cada 1 segundo para detectar muñeca
         if (estaSensorDormido()) {
-            if (millis() - ultimoDestello >= 1000) {
+            // Si hace mas de un minuto que nadie tiene puesta la pulsera, revisar cada 3 s
+            unsigned long periodoDestello = (!pulseraEnMuneca && millis() - sinMunecaDesde > SIN_MUNECA_PARA_LENTO_MS)
+                                            ? DESTELLO_LENTO_MS : DESTELLO_NORMAL_MS;
+            if (millis() - ultimoDestello >= periodoDestello) {
                 ultimoDestello = millis();
                 bool detectada = false;
+                bool destelloEncendido = false;
 
+                // Encender el LED y liberar el I2C durante la espera
                 if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-                    detectada = verificarMunecaDestello();
+                    destelloEncendido = iniciarDestelloMAX();
                     xSemaphoreGive(i2cMutex);
+                }
+                if (destelloEncendido) {
+                    vTaskDelay(pdMS_TO_TICKS(tiempoDestelloMAX()));   // LED encendido solo lo necesario
+                    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+                        detectada = leerDestelloMAX();
+                        xSemaphoreGive(i2cMutex);
+                    }
                 }
 
                 if (!detectada) {
@@ -183,6 +206,7 @@ void TaskMAX30102(void *pvParameters) {
                     inicioDescanso = 0; // Para que mida apenas se coloque la pulsera
                 } else {
                     pulseraEnMuneca = true;
+                    sinMunecaDesde = millis();
                     // Si recien se coloco la pulsera o ya cumplio el descanso de 2 min, despertar y medir
                     if (inicioDescanso == 0 || (millis() - inicioDescanso >= TIEMPO_DESCANSO_MAX_MS)) {
                         if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
@@ -195,12 +219,15 @@ void TaskMAX30102(void *pvParameters) {
                 }
             }
             vTaskDelay(pdMS_TO_TICKS(100));
-        } 
+        }
         // Modo despierto: midiendo activamente BPM y SpO2 durante 30 segundos
         else {
             int bpm = 0;
             int spo2 = 0;
             bool siguePuesta = true;
+
+            // El acelerometro avisa si la muñeca se mueve: esas muestras se descartan
+            informarMovimientoMAX(obtenerNivelMovimiento() > UMBRAL_MOVIMIENTO_G);
 
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                 bpm = procesarLatidosBPM();
@@ -210,7 +237,7 @@ void TaskMAX30102(void *pvParameters) {
             }
 
             // Si despues de 1000ms de despertar se detecta que se quito la pulsera, apagar al instante
-            if ((millis() - inicioMedicion > 1000) && !siguePuesta) {
+            if ((millis() - inicioMedicion > 1000) && !siguePuesta && !enCalibracionMAX()) {
                 if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                     dormirSensorMAX();
                     xSemaphoreGive(i2cMutex);
@@ -224,15 +251,16 @@ void TaskMAX30102(void *pvParameters) {
 
             pulseraEnMuneca = true;
 
-            // Enviar lecturas por BLE cada 1 segundo mientras mide
+            // Enviar lecturas por BLE cada 1 segundo (-1 mientras se estabiliza)
             if (millis() - ultimoEnvioBLE >= 1000) {
                 ultimoEnvioBLE = millis();
-                enviarLatidosBLE(bpm > 0 ? bpm : 0);
-                enviarOxigenoBLE(spo2 > 0 ? spo2 : 0);
+                bool descartando = (millis() - inicioMedicion < TIEMPO_DESCARTE_MS);
+                enviarLatidosBLE((descartando || bpm <= 0) ? -1 : bpm);
+                enviarOxigenoBLE((descartando || spo2 <= 0) ? -1 : spo2);
             }
 
             // Cumplidos los 30 segundos de medicion, volver a dormir por 2 minutos
-            if (millis() - inicioMedicion >= TIEMPO_MEDICION_MAX_MS) {
+            if (millis() - inicioMedicion >= TIEMPO_MEDICION_MAX_MS && !enCalibracionMAX()) {
                 if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                     dormirSensorMAX();
                     xSemaphoreGive(i2cMutex);
@@ -240,14 +268,23 @@ void TaskMAX30102(void *pvParameters) {
                 inicioDescanso = millis();
             }
 
-            vTaskDelay(pdMS_TO_TICKS(20));
+            // Esperar la proxima muestra del sensor (interrupcion en D1) en vez de preguntar cada 20 ms
+            esperarDatoMAX(40);
         }
     }
 }
 
 void TaskMPU6050(void *pvParameters) {
+    unsigned long munecaVistaEn = 0;
+    esp_task_wdt_add(NULL);
     while (1) {
-        if (dispositivoConectado && !estaActualizandoOTA() && (pulseraEnMuneca || hayAlertaCaida())) {
+        esp_task_wdt_reset();
+        // Solo detectar caidas con el celular conectado y la pulsera puesta
+        if (pulseraEnMuneca || !sensorMAXDisponible()) munecaVistaEn = millis();
+        bool puesta = munecaVistaEn != 0 && millis() - munecaVistaEn < GRACIA_SIN_MUNECA_MS;
+        if (dispositivoConectado && !estaActualizandoOTA() && (puesta || enModoCalibracion())) {
+            // Esperar la muestra nueva del acelerometro (interrupcion en D0, 50 por segundo)
+            esperarMuestraMPU(25);
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                 if (estaDetectorDormido()) {
                     despertarDetector();
@@ -255,7 +292,6 @@ void TaskMPU6050(void *pvParameters) {
                 detectarCaidas();
                 xSemaphoreGive(i2cMutex);
             }
-            vTaskDelay(pdMS_TO_TICKS(20));
         } else {
             if (!estaDetectorDormido()) {
                 if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
