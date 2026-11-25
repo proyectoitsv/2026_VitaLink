@@ -42,3 +42,13 @@ firebase-debug.log
 .firebase/
 # APK de prueba del modo demo
 demo-build/
+
+# Archivos locales y de prueba (no se suben)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.cursor/
+read_serial.py
+test.js
+map.png
