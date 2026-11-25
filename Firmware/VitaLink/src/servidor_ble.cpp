@@ -1,5 +1,7 @@
 #include "servidor_ble.h"
 #include "ota.h"
+#include "deteccion_caidas.h"
+#include "MAX30102.h"
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -19,6 +21,14 @@
 #define CARACTERISTICA_OTA_VERSION_UUID "beb5483e-36e1-4688-b7f5-ea07361b26ad"
 #define CARACTERISTICA_OTA_CONTROL_UUID "beb5483e-36e1-4688-b7f5-ea07361b26ae"
 #define CARACTERISTICA_OTA_DATOS_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26af"
+#define CARACTERISTICA_CALIB_DATOS_UUID "beb5483e-36e1-4688-b7f5-ea07361b26b0"  // aceleracion en vivo
+#define CARACTERISTICA_CALIB_CONFIG_UUID "beb5483e-36e1-4688-b7f5-ea07361b26b1" // parametros de caidas
+#define CARACTERISTICA_MAX_DATOS_UUID    "beb5483e-36e1-4688-b7f5-ea07361b26b2" // onda del pulso en vivo
+#define CARACTERISTICA_MAX_CONFIG_UUID   "beb5483e-36e1-4688-b7f5-ea07361b26b3" // parametros del sensor de pulso
+#define CARACTERISTICA_TACTIL_UUID       "beb5483e-36e1-4688-b7f5-ea07361b26b4" // diagnostico del pad S.O.S. (texto)
+
+// Potencia de transmision normal (+6 dBm)
+#define POTENCIA_BLE_NORMAL ESP_PWR_LVL_P6
 
 bool dispositivoConectado = false;
 bool dispositivoDesconectandose = false;
@@ -32,8 +42,65 @@ static BLECharacteristic* pCharSOS = NULL;
 static BLECharacteristic* pCharOTAVersion = NULL;
 static BLECharacteristic* pCharOTAControl = NULL;
 static BLECharacteristic* pCharOTADatos = NULL;
+static BLECharacteristic* pCharCalibDatos = NULL;
+static BLECharacteristic* pCharCalibConfig = NULL;
+static BLECharacteristic* pCharMaxDatos = NULL;
+static BLECharacteristic* pCharMaxConfig = NULL;
+static BLECharacteristic* pCharTactil = NULL;
+
+// Diagnostico del pad S.O.S. (texto corto, entra en un paquete BLE de 20 bytes)
+void enviarDiagnosticoTactilBLE(const char* texto) {
+    if (pCharTactil == NULL) return;
+    pCharTactil->setValue((uint8_t*)texto, strlen(texto));
+    if (dispositivoConectado) pCharTactil->notify();
+}
+
+// Texto con los parametros del sensor de pulso
+static void publicarConfigMax(bool notificar) {
+    if (pCharMaxConfig == NULL) return;
+    ConfigMAX c = obtenerConfigMAX();
+    char texto[160];
+    snprintf(texto, sizeof(texto), "led=%u;prom=%u;sens=%.1f;smax=%.1f;amp=%.0f;pulsera=%lu;bmin=%u;bmax=%u;sa=%.1f;sb=%.2f;cal=%d",
+             c.led, c.promedio, c.sensBase, c.sensMax, c.amplitudMax, (unsigned long)c.umbralPulsera,
+             c.bpmMin, c.bpmMax, c.spo2A, c.spo2B, enCalibracionMAX() ? 1 : 0);
+    pCharMaxConfig->setValue((uint8_t*)texto, strlen(texto));
+    if (notificar && dispositivoConectado) pCharMaxConfig->notify();
+}
+
+// Texto con los parametros actuales: "libre=0.82;impacto=2.00;ventana=800;quieto=0.30;prop=0.70;conf=3000"
+static void publicarConfigCaidas(bool notificar) {
+    if (pCharCalibConfig == NULL) return;
+    ConfigCaidas c = obtenerConfigCaidas();
+    char texto[140];
+    snprintf(texto, sizeof(texto), "libre=%.2f;impacto=%.2f;vmin=%u;ventana=%u;quieto=%.2f;prop=%.2f;conf=%u;cal=%d",
+             c.caidaLibreG, c.impactoG, c.ventanaMinMs, c.ventanaMs, c.quietoG, c.proporcionQuieto, c.confirmacionMs,
+             enModoCalibracion() ? 1 : 0);
+    pCharCalibConfig->setValue((uint8_t*)texto, strlen(texto));
+    if (notificar && dispositivoConectado) pCharCalibConfig->notify();
+}
 
 static int ultimoPorcentajeOTA = -1;
+
+// Ahorro de bateria en la radio: conexion lenta y anuncio lento sin celular
+#define CONEXION_INTERVALO_MIN   40    // x1,25 ms = 50 ms
+#define CONEXION_INTERVALO_MAX   80    // x1,25 ms = 100 ms
+#define CONEXION_LATENCIA        3
+#define CONEXION_TIMEOUT         600   // x10 ms = 6 s
+#define ANUNCIO_RAPIDO_MS        60000UL
+static unsigned long inicioAnuncio = 0;
+static bool anuncioLento = false;
+static volatile bool pedidoAnuncioRapido = false;
+static volatile unsigned long pedidoReinicioEn = 0;   // 0 = sin pedido de reinicio
+
+static void configurarAnuncio(bool lento) {
+    BLEAdvertising* adv = BLEDevice::getAdvertising();
+    adv->stop();
+    adv->setMinInterval(lento ? 1600 : 160);   // x0,625 ms: 1 s o 100 ms
+    adv->setMaxInterval(lento ? 1760 : 240);
+    adv->start();
+    anuncioLento = lento;
+    if (!lento) inicioAnuncio = millis();
+}
 static unsigned long instanteConexionBLE = 0;
 static bool versionInicialEnviadaBLE = false;
 
@@ -57,6 +124,8 @@ class MisCallbacksServidor: public BLEServerCallbacks {
         }
     }
     void onDisconnect(BLEServer* pServer) {
+        activarModoCalibracion(false); // si se corta el enlace, la pulsera vuelve al modo normal
+        activarCalibracionMAX(false);
         dispositivoConectado = false;
         dispositivoDesconectandose = true;
         if (estaActualizandoOTA()) {
@@ -130,29 +199,33 @@ void inicializarBLE() {
         esp_base_mac_addr_set(macBase);
     }
 
-    BLEDevice::init("VitaLink"); 
-    BLEDevice::setPower(ESP_PWR_LVL_N0); // Potencia 0 dBm para reducir consumo de bateria
+    // Cola para los comandos de la pantalla de calibracion (se procesan en TaskBLE)
+    if (colaComandosCalib == NULL) colaComandosCalib = xQueueCreate(6, LARGO_COMANDO_CALIB);
+
+    BLEDevice::init("VitaLink");
+    BLEDevice::setPower(POTENCIA_BLE_NORMAL);
     BLEDevice::setMTU(517);
-    
+
     pServer = BLEDevice::createServer();
     pServer->setCallbacks(new MisCallbacksServidor());
-    
+
     // Se reservan 40 handles para soportar todos los buzones de sensores y los 3 de OTA
-    BLEService *pService = pServer->createService(BLEUUID(SERVICIO_VITALINK_UUID), 40);
-    
+    BLEService *pService = pServer->createService(BLEUUID(SERVICIO_VITALINK_UUID), 60); // 12 canales: hacen falta ~36
+
     // Crear los 5 buzones con permisos de Lectura (READ) y Notificación Push (NOTIFY)
     pCharBPM = pService->createCharacteristic(CARACTERISTICA_BPM_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pCharBPM->addDescriptor(new BLE2902());
-    
+
     pCharSpO2 = pService->createCharacteristic(CARACTERISTICA_SPO2_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pCharSpO2->addDescriptor(new BLE2902());
-    
+
     pCharBat = pService->createCharacteristic(CARACTERISTICA_BAT_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pCharBat->addDescriptor(new BLE2902());
-    
-    pCharCaida = pService->createCharacteristic(CARACTERISTICA_CAIDA_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+
+    pCharCaida = pService->createCharacteristic(CARACTERISTICA_CAIDA_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_WRITE);
+    pCharCaida->setCallbacks(new CallbacksCaida());
     pCharCaida->addDescriptor(new BLE2902());
-    
+
     pCharSOS = pService->createCharacteristic(CARACTERISTICA_SOS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
     pCharSOS->addDescriptor(new BLE2902());
 
@@ -166,14 +239,36 @@ void inicializarBLE() {
 
     pCharOTADatos = pService->createCharacteristic(CARACTERISTICA_OTA_DATOS_UUID, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
     pCharOTADatos->setCallbacks(new CallbacksOTADatos());
-    
+
+    // Calibracion de la deteccion de caidas (pantalla de la app)
+    pCharCalibDatos = pService->createCharacteristic(CARACTERISTICA_CALIB_DATOS_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+    pCharCalibDatos->addDescriptor(new BLE2902());
+    pCharCalibConfig = pService->createCharacteristic(CARACTERISTICA_CALIB_CONFIG_UUID,
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+    pCharCalibConfig->addDescriptor(new BLE2902());
+    pCharCalibConfig->setCallbacks(new CallbacksCalibConfig());
+
+    // Calibracion del sensor de pulso (onda en vivo y parametros)
+    pCharMaxDatos = pService->createCharacteristic(CARACTERISTICA_MAX_DATOS_UUID, BLECharacteristic::PROPERTY_NOTIFY);
+    pCharMaxDatos->addDescriptor(new BLE2902());
+    pCharMaxConfig = pService->createCharacteristic(CARACTERISTICA_MAX_CONFIG_UUID,
+        BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY);
+    pCharMaxConfig->addDescriptor(new BLE2902());
+    pCharMaxConfig->setCallbacks(new CallbacksMaxConfig());
+
+    // Diagnostico del tactil: se lee con cualquier app BLE (por ejemplo nRF Connect)
+    pCharTactil = pService->createCharacteristic(CARACTERISTICA_TACTIL_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    pCharTactil->addDescriptor(new BLE2902());
+
     pService->start(); // Abrimos el edificio
 
     // Asignar los valores iniciales una vez iniciado el servicio y registrados los handles
     pCharOTAVersion->setValue((uint8_t*)VERSION_FIRMWARE, strlen(VERSION_FIRMWARE));
     pCharOTAControl->setValue((uint8_t*)"IDLE", 4);
-    
-    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising(); 
+    publicarConfigCaidas(false);
+    publicarConfigMax(false);
+
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
     pAdvertising->addServiceUUID(SERVICIO_VITALINK_UUID);
     pAdvertising->setAppearance(192); // Generic Watch
     pAdvertising->setScanResponse(true);
@@ -229,6 +324,38 @@ void enviarAlertaCaidaBLE(bool hayCaida) {
         pCharCaida->setValue((uint8_t*)buffer, strlen(buffer));
         pCharCaida->notify();
     }
+}
+
+// "C" = el paciente cancelo la alerta de caida tocando la pulsera
+// Paquete de muestras de aceleracion para el grafico en vivo de la app
+void enviarCalibracionBLE(const uint8_t* datos, size_t longitud) {
+    if (dispositivoConectado && pCharCalibDatos != NULL) {
+        pCharCalibDatos->setValue((uint8_t*)datos, longitud);
+        pCharCalibDatos->notify();
+    }
+}
+
+// Paquete con la onda del pulso para el grafico de la app
+void enviarCalibracionMaxBLE(const uint8_t* datos, size_t longitud) {
+    if (dispositivoConectado && pCharMaxDatos != NULL) {
+        pCharMaxDatos->setValue((uint8_t*)datos, longitud);
+        pCharMaxDatos->notify();
+    }
+}
+
+void enviarCancelacionCaidaBLE() {
+    if (dispositivoConectado) {
+        pCharCaida->setValue((uint8_t*)"C", 1);
+        pCharCaida->notify();
+    }
+}
+
+unsigned long tiempoConectadoBLE() {
+    return dispositivoConectado ? millis() - instanteConexionBLE : 0;
+}
+
+void anunciarRapidoBLE() {
+    pedidoAnuncioRapido = true;   // se aplica en la tarea del Bluetooth
 }
 
 void enviarAlertaSOSBLE(bool presionado) {
