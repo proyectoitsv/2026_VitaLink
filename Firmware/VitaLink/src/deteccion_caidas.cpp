@@ -345,39 +345,94 @@ void detectarCaidas() {
     return;
   }
 
-  // 2. MODO VIGILANCIA
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-
-  float x_g = a.acceleration.x / 9.81;
-  float y_g = a.acceleration.y / 9.81;
-  float z_g = a.acceleration.z / 9.81;
-  float a_res = sqrt(pow(x_g, 2) + pow(y_g, 2) + pow(z_g, 2));
-
-  // FASE 1: detección de inicio de caída libre (ingravidez < 0.6g)
-  if (a_res < UMBRAL_CAIDA_LIBRE) {
-    if (!posible_caida_libre) {
-      posible_caida_libre = true;
-      tiempo_caida_libre = ahora;
-    }
+  // 2. MODO VIGILANCIA: lectura directa por registros I2C
+  float x_g = 0.0f, y_g = 0.0f, z_g = 0.0f;
+  if (!leerAceleracionG(x_g, y_g, z_g)) {
+    // Si hubo un fallo de lectura I2C, reconfigurar en el proximo ciclo
+    mpu_iniciado = false;
+    return;
   }
 
-  // FASE 2: detección de impacto dentro de la ventana real [250ms, 700ms]
-  if (posible_caida_libre) {
-    unsigned long tiempoTranscurrido = ahora - tiempo_caida_libre;
+  float a_res = sqrtf((x_g * x_g) + (y_g * y_g) + (z_g * z_g));
 
-    if (a_res > UMBRAL_IMPACTO) {
-      if (tiempoTranscurrido >= VENTANA_MIN_TIEMPO && tiempoTranscurrido <= VENTANA_MAX_TIEMPO) {
-        estado_alarma = true;
-        tiempo_inicio_alarma = ahora;
-        enviarAlertaCaidaBLE(true);
-        Serial.printf("[Caidas] !!! CAIDA DETECTADA (%.2fg en %lums) - ALARMA ACTIVADA !!!\n", a_res, tiempoTranscurrido);
+  // Si devuelve exactamente 0.00g es porque el chip se durmio o reseteo: despertar al instante
+  if (a_res < 0.01f) {
+    configurarHardwareMPU(mpu_addr);
+    return;
+  }
+
+  // Nivel de movimiento de la muñeca (lo usa el MAX30102 para descartar latidos)
+  float desvio = fabsf(a_res - 1.0f);
+  nivel_movimiento = nivel_movimiento + ALFA_MOVIMIENTO * (desvio - nivel_movimiento);
+
+  // PASO 2: despues de un impacto, confirmar que la persona quedo quieta
+  if (confirmando_caida) {
+    unsigned long desdeImpacto = ahora - tiempo_impacto;
+    if (desdeImpacto >= TIEMPO_REBOTE_MS) {
+      muestras_confirmacion++;
+      if (desvio < cfg.quietoG) muestras_quietas++;
+    }
+    if (desdeImpacto >= cfg.confirmacionMs) {
+      float proporcion = muestras_confirmacion > 0 ? (float)muestras_quietas / muestras_confirmacion : 0.0f;
+      uint16_t porcentaje = (uint16_t)(proporcion * 100.0f + 0.5f);
+      if (proporcion >= cfg.proporcionQuieto) {
+        if (modo_calibracion) {
+          // Modo prueba: se informa a la app pero no se dispara la alerta real
+          registrarEventoCalibracion(EVENTO_CONFIRMADA, porcentaje);
+          confirmando_caida = false;
+        } else {
+          activarAlarmaCaida(ahora, g_impacto);
+        }
+      } else {
+        registrarEventoCalibracion(EVENTO_DESCARTADA, porcentaje);
+        confirmando_caida = false;
       }
-      // Si el golpe ocurrió antes del tiempo mínimo (sacudida rápida de muñeca), se descarta
-      posible_caida_libre = false;
-    } else if (tiempoTranscurrido > VENTANA_MAX_TIEMPO) {
-      // Cancelar si pasó el tiempo máximo sin impacto
-      posible_caida_libre = false;
     }
+    registrarMuestraCalibracion(a_res);
+    return;
   }
+
+  // PASO 1: caida libre y despues impacto dentro de la ventana de tiempo
+  if (a_res < cfg.caidaLibreG && !posible_caida_libre) {
+    registrarEventoCalibracion(EVENTO_CAIDA_LIBRE, (uint16_t)(a_res * 1000.0f));
+    posible_caida_libre = true;
+    tiempo_caida_libre = ahora;
+  }
+
+  unsigned long desdeCaidaLibre = ahora - tiempo_caida_libre;
+  if (a_res > cfg.impactoG && posible_caida_libre && desdeCaidaLibre < cfg.ventanaMinMs) {
+    // Impacto demasiado rapido: fue un gesto del brazo, no una caida
+    registrarEventoCalibracion(EVENTO_MUY_RAPIDO, (uint16_t)desdeCaidaLibre);
+    posible_caida_libre = false;
+    registrarMuestraCalibracion(a_res);
+    return;
+  }
+
+  if (a_res > cfg.impactoG && posible_caida_libre && desdeCaidaLibre <= cfg.ventanaMs) {
+    registrarEventoCalibracion(EVENTO_IMPACTO, (uint16_t)(a_res * 1000.0f));
+    confirmando_caida = true;
+    tiempo_impacto = ahora;
+    g_impacto = a_res;
+    muestras_confirmacion = 0;
+    muestras_quietas = 0;
+    posible_caida_libre = false;
+    registrarMuestraCalibracion(a_res);
+    return;
+  }
+
+  // Expirar la ventana de caida libre
+  if (posible_caida_libre && (ahora - tiempo_caida_libre > cfg.ventanaMs)) {
+    posible_caida_libre = false;
+  }
+  registrarMuestraCalibracion(a_res);
+}
+
+// Cancela la alarma desde la pulsera (el paciente toco el sensor tactil)
+void cancelarAlarmaCaida() {
+  aviso_activo = false;
+  aviso_visto = false;
+  if (!estado_alarma) return;
+  estado_alarma = false;
+  confirmando_caida = false;
+  posible_caida_libre = false;
 }
