@@ -200,9 +200,116 @@ bool estaDetectorDormido() {
   return detector_dormido;
 }
 
+// Parametros configurables
+static float limitar(float v, float minimo, float maximo) {
+  return v < minimo ? minimo : (v > maximo ? maximo : v);
+}
+
+static void cargarConfigCaidas() {
+  Preferences prefs;
+  prefs.begin("caidas", true);
+  cfg.caidaLibreG = prefs.getFloat("libre", CONFIG_FABRICA.caidaLibreG);
+  cfg.impactoG = prefs.getFloat("impacto", CONFIG_FABRICA.impactoG);
+  cfg.ventanaMinMs = prefs.getUShort("ventmin", CONFIG_FABRICA.ventanaMinMs);
+  cfg.ventanaMs = prefs.getUShort("ventana", CONFIG_FABRICA.ventanaMs);
+  cfg.quietoG = prefs.getFloat("quieto", CONFIG_FABRICA.quietoG);
+  cfg.proporcionQuieto = prefs.getFloat("prop", CONFIG_FABRICA.proporcionQuieto);
+  cfg.confirmacionMs = prefs.getUShort("conf", CONFIG_FABRICA.confirmacionMs);
+  prefs.end();
+  aplicarConfigCaidas(cfg);
+  cfg_cargada = true;
+}
+
+ConfigCaidas obtenerConfigCaidas() {
+  return cfg;
+}
+
+void aplicarConfigCaidas(const ConfigCaidas &c) {
+  ConfigCaidas n = c;
+  n.caidaLibreG = limitar(n.caidaLibreG, 0.10f, 0.95f);
+  n.impactoG = limitar(n.impactoG, 1.20f, 9.00f);
+  n.ventanaMs = (uint16_t)limitar(n.ventanaMs, 200, 2000);
+  n.ventanaMinMs = (uint16_t)limitar(n.ventanaMinMs, 0, 1500);
+  // El minimo siempre queda al menos 100 ms por debajo del maximo
+  if (n.ventanaMinMs + 100 > n.ventanaMs) n.ventanaMinMs = n.ventanaMs > 100 ? n.ventanaMs - 100 : 0;
+  n.quietoG = limitar(n.quietoG, 0.05f, 1.00f);
+  n.proporcionQuieto = limitar(n.proporcionQuieto, 0.30f, 1.00f);
+  n.confirmacionMs = (uint16_t)limitar(n.confirmacionMs, 1000, 8000);
+  cfg = n;
+}
+
+void guardarConfigCaidas() {
+  Preferences prefs;
+  prefs.begin("caidas", false);
+  prefs.putFloat("libre", cfg.caidaLibreG);
+  prefs.putFloat("impacto", cfg.impactoG);
+  prefs.putUShort("ventmin", cfg.ventanaMinMs);
+  prefs.putUShort("ventana", cfg.ventanaMs);
+  prefs.putFloat("quieto", cfg.quietoG);
+  prefs.putFloat("prop", cfg.proporcionQuieto);
+  prefs.putUShort("conf", cfg.confirmacionMs);
+  prefs.end();
+}
+
+void restaurarConfigCaidas() {
+  cfg = CONFIG_FABRICA;
+  guardarConfigCaidas();
+}
+
+void activarModoCalibracion(bool activo) {
+  modo_calibracion = activo;
+  inicio_calibracion = millis();
+  calib_cantidad = 0;
+  calib_evento = EVENTO_NINGUNO;
+  if (activo) {
+    // Arrancar de cero para que las pruebas no hereden estados viejos
+    confirmando_caida = false;
+    posible_caida_libre = false;
+  }
+}
+
+bool enModoCalibracion() {
+  if (modo_calibracion && millis() - inicio_calibracion >= CALIB_MAX_MS) activarModoCalibracion(false);
+  return modo_calibracion;
+}
+
+static void registrarEventoCalibracion(uint8_t evento, uint16_t valor) {
+  if (!modo_calibracion) return;
+  calib_evento = evento;
+  calib_valor = valor;
+}
+
+// Junta muestras y las manda a la app de a 5 (10 paquetes por segundo)
+static void registrarMuestraCalibracion(float a_res) {
+  if (!enModoCalibracion()) return;
+  float mg = a_res * 1000.0f;
+  if (mg > 65000.0f) mg = 65000.0f;
+  calib_muestras[calib_cantidad++] = (uint16_t)mg;
+  if (calib_cantidad < CALIB_MUESTRAS_POR_PAQUETE) return;
+
+  // Paquete: [cantidad][muestras uint16 LE en mg][evento][valor uint16 LE]
+  uint8_t paquete[1 + CALIB_MUESTRAS_POR_PAQUETE * 2 + 3];
+  size_t i = 0;
+  paquete[i++] = calib_cantidad;
+  for (uint8_t k = 0; k < calib_cantidad; k++) {
+    paquete[i++] = calib_muestras[k] & 0xFF;
+    paquete[i++] = calib_muestras[k] >> 8;
+  }
+  paquete[i++] = calib_evento;
+  paquete[i++] = calib_valor & 0xFF;
+  paquete[i++] = calib_valor >> 8;
+  enviarCalibracionBLE(paquete, i);
+  calib_cantidad = 0;
+  calib_evento = EVENTO_NINGUNO;
+}
+
 void inicializarDetector() {
-  if (!mpu.begin()) {
-    Serial.println("Aviso: Sensor MPU6050 no detectado en el bus I2C");
+  if (!cfg_cargada) cargarConfigCaidas();
+  if (probarDireccionMPU(MPU_ADDR_PRIMARIA)) {
+    mpu_addr = MPU_ADDR_PRIMARIA;
+  } else if (probarDireccionMPU(MPU_ADDR_SECUNDARIA)) {
+    mpu_addr = MPU_ADDR_SECUNDARIA;
+  } else {
     mpu_iniciado = false;
     return;
   }
