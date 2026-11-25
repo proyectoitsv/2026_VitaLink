@@ -271,9 +271,98 @@ static void resetearVariablesMAX() {
     muestrasSpO2 = 0;
     spo2Definitivo = 0;
     tiempoInicioVentanaSpO2 = millis();
+    lineaBaseIR = 0.0f; lineaBaseRed = 0.0f;
+    sumaCuadIR = 0.0f; sumaCuadRed = 0.0f;
+    cantHistorialSpO2 = 0;
+    indiceHistorialSpO2 = 0;
+}
+
+void informarMovimientoMAX(bool enMovimiento) {
+    munecaEnMovimiento = enMovimiento;
+}
+
+static void IRAM_ATTR isrDatoMAX() {
+    BaseType_t despertar = pdFALSE;
+    if (semDatoMAX) xSemaphoreGiveFromISR(semDatoMAX, &despertar);
+    if (despertar) portYIELD_FROM_ISR();
+}
+
+// Espera hasta que el sensor tenga una muestra nueva
+bool esperarDatoMAX(uint32_t timeoutMs) {
+    if (!interrupcionMAXActiva || semDatoMAX == NULL) {
+        vTaskDelay(pdMS_TO_TICKS(timeoutMs));
+        return false;
+    }
+    return xSemaphoreTake(semDatoMAX, pdMS_TO_TICKS(timeoutMs)) == pdTRUE;
+}
+
+static void prepararInterrupcionMAX() {
+    if (semDatoMAX == NULL) semDatoMAX = xSemaphoreCreateBinary();
+    if (!interrupcionMAXActiva && semDatoMAX != NULL) {
+        pinMode(PIN_INT_MAX, INPUT_PULLUP); // INT del MAX30102 es de drenador abierto
+        attachInterrupt(digitalPinToInterrupt(PIN_INT_MAX), isrDatoMAX, FALLING);
+        interrupcionMAXActiva = true;
+    }
+}
+
+// Escribe la configuracion completa del sensor (LEDs, ADC, muestreo)
+static void configurarSensorMAX() {
+    sensor.softReset();
+    // Rango 16384 (no satura en dedo ni en muñeca), promedio 8 muestras a 100 SPS (12.5 muestras/seg)
+    sensor.setup(cfgMax.led, cfgMax.promedio, 2, 100, 411, 16384);
+    sensor.setPulseAmplitudeRed(0); // Apagar luz roja visible inicialmente
+    sensor.enableDATARDY();          // Avisar por el pin INT cada vez que hay una muestra nueva
+    sensor.getINT1();                // Limpiar cualquier interrupcion pendiente
+    prepararInterrupcionMAX();
+}
+
+// Intenta comunicarse con el sensor y configurarlo
+static bool conectarSensorMAX() {
+    if (!sensor.begin(Wire, I2C_SPEED_STANDARD)) {
+        return false;
+    }
+    configurarSensorMAX();
+    return true;
+}
+
+// Verifica que el sensor siga respondiendo; si no, lo recupera
+static bool asegurarSensorMAX() {
+    if (!sensorIniciado) {
+        if (millis() - ultimoReintentoMAX < INTERVALO_REINTENTO_MS) return false;
+        ultimoReintentoMAX = millis();
+        if (!conectarSensorMAX()) return false;
+        sensorIniciado = true;
+        if (sensorDormido) {
+            sensor.setPulseAmplitudeIR(0);
+            sensor.setPulseAmplitudeRed(0);
+            sensor.shutDown();
+        }
+        return true;
+    }
+
+    // Si el sensor se reinicio (caida de tension) pierde el modo SpO2: reconfigurarlo
+    uint8_t modo = sensor.readRegister8(MAX30105_ADDRESS, REG_MODE_CONFIG) & 0x07;
+    if (modo != MODO_SPO2) {
+        if (sensor.readPartID() != 0x15) {
+            sensorIniciado = false; // no responde: se reintenta en el proximo ciclo
+            return false;
+        }
+        configurarSensorMAX();
+        if (sensorDormido) {
+            sensor.setPulseAmplitudeIR(0);
+            sensor.shutDown();
+        }
+    }
+    return true;
 }
 
 void dormirSensorMAX() {
+    if (!sensorIniciado) {
+        // Sin sensor: quedar en modo dormido para que el destello reintente conectarlo
+        pulseraPuesta = false;
+        sensorDormido = true;
+        return;
+    }
     if (!sensorDormido) {
         sensor.setPulseAmplitudeRed(0);
         sensor.setPulseAmplitudeIR(0);
@@ -284,14 +373,27 @@ void dormirSensorMAX() {
         pulseraPuesta = false;
         resetearVariablesMAX();
         sensorDormido = true;
+        // Modo apagado del chip (~1 uA): deja de muestrear hasta el proximo destello o medicion
+        sensor.shutDown();
     }
 }
 
+// Tiempo que el LED tiene que estar encendido para obtener una muestra
+bool sensorMAXDisponible() {
+    return sensorIniciado;
+}
+
+uint16_t tiempoDestelloMAX() {
+    return 20 + 20 * cfgMax.promedio;
+}
+
 void despertarSensorMAX() {
+    if (!asegurarSensorMAX()) return;
     if (sensorDormido) {
-        sensor.setPulseAmplitudeIR(150);
-        sensor.setPulseAmplitudeRed(0);
-        delay(170);
+        sensor.wakeUp();
+        sensor.setPulseAmplitudeIR(cfgMax.led);
+        sensor.setPulseAmplitudeRed(cfgMax.led);
+        delay(tiempoDestelloMAX());
         sensor.clearFIFO();
         while (sensor.available()) {
             sensor.nextSample();
@@ -304,28 +406,54 @@ void despertarSensorMAX() {
     }
 }
 
+// El destello se divide en dos pasos para liberar el bus I2C
+
+static bool completarDestelloMAX();
+
+// Paso 1: comprobar el sensor y encender el LED infrarrojo. Devuelve false si no hay que esperar.
+bool iniciarDestelloMAX() {
+    aplicarHardwarePendienteMAX();
+    if (!sensorDormido) return false;
+
+    // Comprobar que el sensor responde (si no, se reintenta en el proximo destello)
+    if (!asegurarSensorMAX()) {
+        pulseraPuesta = false;
+        return false;
+    }
+    sensor.wakeUp();   // sale del modo apagado solo para el destello
+    sensor.setPulseAmplitudeRed(0);
+    sensor.setPulseAmplitudeIR(cfgMax.led);
+    return true;
+}
+
+// Paso 2 (despues de esperar ~170 ms): leer una muestra y apagar los LEDs
+bool leerDestelloMAX() {
+    if (!sensorDormido || !sensorIniciado) return pulseraPuesta;
+    return completarDestelloMAX();
+}
+
 bool verificarMunecaDestello() {
     // Si ya está despierto midiendo activamente, devolvemos el estado en curso
     if (!sensorDormido) {
         return pulseraPuesta;
     }
+    if (!iniciarDestelloMAX()) return false;
+    delay(tiempoDestelloMAX());
+    return completarDestelloMAX();
+}
 
-    // 1. Encender el LED infrarrojo para el destello de detección
-    sensor.setPulseAmplitudeRed(0);
-    sensor.setPulseAmplitudeIR(150);
-
-    // 2. Esperar 170ms para que termine cualquier promedio previo con el LED apagado,
-    //    limpiar el FIFO de hardware y leer 1 muestra nueva directa con getIR()
-    delay(170);
+static bool completarDestelloMAX() {
+    // Limpiar el FIFO de hardware y leer 1 muestra nueva directa con getIR()
     sensor.clearFIFO();
     uint32_t lecturaIR = sensor.getIR();
     while (sensor.available()) {
         sensor.nextSample();
     }
 
-    // 3. Apagar inmediatamente los LEDs para ahorrar batería el resto del segundo
+    // 3. Apagar inmediatamente los LEDs y el chip para ahorrar batería hasta el proximo destello
     sensor.setPulseAmplitudeIR(0);
     sensor.setPulseAmplitudeRed(0);
+    sensor.shutDown();
 
     pulseraPuesta = (lecturaIR > UMBRAL_PULSERA_PUESTA);
     return pulseraPuesta;
@@ -340,22 +468,62 @@ bool hayPulseraPuesta() {
 }
 
 bool inicializarSensorMAX() {
-    // Se verifica la conexión I2C
-    if (!sensor.begin(Wire, I2C_SPEED_STANDARD)) {
-        return false;
+    if (!cfgMaxCargada) cargarConfigMAX();
+    // Al encender en frio el sensor puede tardar en responder: se reintenta varias veces
+    sensorIniciado = false;
+    for (int intento = 0; intento < INTENTOS_INICIO && !sensorIniciado; intento++) {
+        if (intento > 0) delay(100);
+        sensorIniciado = conectarSensorMAX();
     }
-    
-    sensor.softReset();
-    
-    // Configuración de LEDs y ADC del max
-    sensor.setup(150, 16, 2, 100, 411, 16384); 
-    sensor.setPulseAmplitudeRed(0); // Apagar luz roja visible inicialmente
-    
+    ultimoReintentoMAX = millis();
+
     sensorDormido = false;
     resetearVariablesMAX();
 
-    // Arranca dormido por defecto hasta que el main lo despierte al conectar Bluetooth
+    // Arranca dormido hasta que se conecte el Bluetooth
     dormirSensorMAX();
+    return sensorIniciado;
+}
+
+// Mediana de los latidos guardados (no se deja arrastrar por un valor raro como el promedio)
+static float medianaBPM() {
+    float v[CANTIDAD_LATIDOS_FILTRO];
+    for (uint8_t i = 0; i < latidosGuardados; i++) v[i] = ultimosBPM[i];
+    for (uint8_t i = 1; i < latidosGuardados; i++) {
+        float x = v[i]; int j = i - 1;
+        while (j >= 0 && v[j] > x) { v[j + 1] = v[j]; j--; }
+        v[j + 1] = x;
+    }
+    if (latidosGuardados == 0) return 0.0f;
+    if (latidosGuardados % 2) return v[latidosGuardados / 2];
+    return (v[latidosGuardados / 2 - 1] + v[latidosGuardados / 2]) / 2.0f;
+}
+
+static void guardarLatido(float bpm) {
+    ultimosBPM[indiceBPM] = bpm;
+    indiceBPM = (indiceBPM + 1) % CANTIDAD_LATIDOS_FILTRO;
+    if (latidosGuardados < CANTIDAD_LATIDOS_FILTRO) latidosGuardados++;
+}
+
+// Decide si un latido nuevo se acepta
+static bool registrarLatido(float bpmInstantaneo) {
+    if (latidosGuardados >= 3) {
+        float med = medianaBPM();
+        if (fabsf(bpmInstantaneo - med) > med * TOLERANCIA_LATIDO) {
+            // Atipico: casi siempre es un latido perdido (intervalo doble) o contado dos veces (mitad)
+            atipicosSeguidos++;
+            if (atipicosSeguidos < ATIPICOS_PARA_REINICIAR) return false;
+            // Muchos atipicos seguidos: el pulso cambio de verdad (por ejemplo, despues de moverse)
+            latidosGuardados = 0;
+            indiceBPM = 0;
+            bpmSuavizado = 0.0f;
+        }
+    }
+    atipicosSeguidos = 0;
+    guardarLatido(bpmInstantaneo);
+    float med = medianaBPM();
+    bpmSuavizado = (bpmSuavizado <= 0.0f) ? med : bpmSuavizado + SUAVIZADO_BPM * (med - bpmSuavizado);
+    bpmPromedio = (int)(bpmSuavizado + 0.5f);
     return true;
 }
 
