@@ -1,20 +1,64 @@
 #include "MAX30102.h"
 #include <Wire.h>
 #include "MAX30105.h"
+#include "servidor_ble.h"
+#include <Preferences.h>
 
-#define UMBRAL_PULSERA_PUESTA      100000
-#define CAIDA_MINIMA_IR            20.0
-#define RANGO_CAIDA_MAX_IR         10000.0
-#define MIN_INTERVALO_LATIDO_MS    400
-#define MAX_INTERVALO_LATIDO_MS    2000
-#define MIN_BPM_VALIDO             40
-#define MAX_BPM_VALIDO             160
-#define CANTIDAD_LATIDOS_FILTRO    10
-#define TIEMPO_ESTABILIZACION_MS   5000
+// Parametros configurables desde la app (valores de fabrica)
+static const ConfigMAX CONFIG_MAX_FABRICA = {
+    165,       // led
+    4,         // promedio: 25 muestras/s (40 ms de resolucion para medir cada latido)
+    8.0f,      // sensBase
+    50.0f,     // sensMax
+    1500.0f,   // amplitudMax
+    35000,     // umbralPulsera
+    40,        // bpmMin
+    145,       // bpmMax
+    104.0f,    // spo2A
+    5.0f       // spo2B
+};
+static ConfigMAX cfgMax = CONFIG_MAX_FABRICA;
+static bool cfgMaxCargada = false;
+static volatile bool cfgMaxPendiente = false;   // hay que reconfigurar el sensor (led/promedio)
+
+// El algoritmo usa estos nombres: ahora apuntan a los parametros configurables
+#define UMBRAL_PULSERA_PUESTA      ((float)cfgMax.umbralPulsera)
+#define CAIDA_MINIMA_IR_BASE       (cfgMax.sensBase)
+#define RANGO_CAIDA_MAX_IR         (cfgMax.amplitudMax)
+#define MIN_INTERVALO_LATIDO_MS    (60000UL / cfgMax.bpmMax)
+#define MAX_INTERVALO_LATIDO_MS    (60000UL / cfgMax.bpmMin)
+#define MIN_BPM_VALIDO             (cfgMax.bpmMin)
+#define MAX_BPM_VALIDO             (cfgMax.bpmMax)
+#define CANTIDAD_LATIDOS_FILTRO    8       // Latidos usados para la mediana
+#define TOLERANCIA_LATIDO          0.20f   // Un latido que se aleja mas de 20% de la mediana es atipico
+#define ATIPICOS_PARA_REINICIAR    4       // Si hay 4 atipicos seguidos, el ritmo cambio de verdad
+#define SUAVIZADO_BPM              0.30f   // Cuanto sigue el valor informado a cada latido nuevo
+#define TIEMPO_ESTABILIZACION_MS   4000
 #define TIEMPO_VENTANA_MS          2500
+
+// Recuperacion del sensor si no responde o pierde la configuracion
+#define REG_MODE_CONFIG            0x09
+#define MODO_SPO2                  0x03
+#define INTENTOS_INICIO            5
+#define INTERVALO_REINTENTO_MS     1000
+
+// Interrupcion del MAX30102 (pin INT del sensor -> D1 de la XIAO, activo en bajo)
+#define PIN_INT_MAX                D1
+
+// SpO2: la parte pulsatil se mide como RMS
+#define ALFA_LINEA_BASE            0.04f   // Seguimiento lento de la componente continua (DC)
+#define MIN_MUESTRAS_SPO2          18      // ~1.5 s de datos validos por ventana
+#define SPO2_COEF_A                (cfgMax.spo2A)  // SpO2 = A - B * R  (calibrar contra un oximetro de dedo)
+#define SPO2_COEF_B                (cfgMax.spo2B)
+#define SPO2_MIN_REPORTE           70      // Ya no se recorta a 90%: una desaturacion real se ve
+#define SPO2_MAX_REPORTE           100
+#define R_MAXIMO_VALIDO            4.0f    // R mayores son ruido o mala lectura: se descarta la ventana
+#define VENTANAS_MEDIANA_SPO2      3       // Mediana de las ultimas 3 ventanas para evitar saltos
 
 static MAX30105 sensor;
 
+static bool sensorIniciado = false;
+static unsigned long ultimoReintentoMAX = 0;
 static bool sensorDormido = false;
 static bool pulseraPuesta = false;
 static unsigned long tiempoInicioToque = 0;
@@ -42,25 +86,148 @@ static long ultimoIR = 0;
 static long ultimoRed = 0;
 static unsigned long idMuestraGlobal = 0;
 
-static void actualizarLecturas() {
-    if (sensorDormido) return;
-
-    sensor.check(); 
-    
-    // Se precesa todos los datos nuevos disponibles en la cola de la librería
-    while (sensor.available()) {
-        ultimoIR = sensor.getFIFOIR();
-        ultimoRed = sensor.getFIFORed();
-        sensor.nextSample(); // Avanza el puntero
-        idMuestraGlobal++;   // "Etiquetamos" esta nueva muestra
+static uint8_t promedioARegistro(uint8_t n) {
+    switch (n) {
+        case 1: return 0x00;   // registro FIFO_CONFIG del MAX30102 (bits 7:5)
+        case 2: return 0x20;
+        case 4: return 0x40;
+        case 16: return 0x80;
+        default: return 0x60;  // 8 muestras
     }
 }
 
+static void cargarConfigMAX() {
+    Preferences prefs;
+    prefs.begin("max", true);
+    ConfigMAX c = CONFIG_MAX_FABRICA;
+    c.led = prefs.getUChar("led", c.led);
+    c.promedio = prefs.getUChar("prom", c.promedio);
+    c.sensBase = prefs.getFloat("sens", c.sensBase);
+    c.sensMax = prefs.getFloat("smax", c.sensMax);
+    c.amplitudMax = prefs.getFloat("amp", c.amplitudMax);
+    c.umbralPulsera = prefs.getULong("pulsera", c.umbralPulsera);
+    c.bpmMin = prefs.getUChar("bmin", c.bpmMin);
+    c.bpmMax = prefs.getUChar("bmax", c.bpmMax);
+    c.spo2A = prefs.getFloat("sa", c.spo2A);
+    c.spo2B = prefs.getFloat("sb", c.spo2B);
+    prefs.end();
+    aplicarConfigMAX(c);
+    cfgMaxCargada = true;
+}
+
+ConfigMAX obtenerConfigMAX() {
+    return cfgMax;
+}
+
+static float limitarF(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
+
+void aplicarConfigMAX(const ConfigMAX &c) {
+    ConfigMAX n = c;
+    n.led = (uint8_t)limitarF(n.led, 10, 255);
+    if (n.promedio != 1 && n.promedio != 2 && n.promedio != 4 && n.promedio != 8 && n.promedio != 16) n.promedio = 8;
+    n.sensBase = limitarF(n.sensBase, 1.0f, 200.0f);
+    n.sensMax = limitarF(n.sensMax, n.sensBase, 1000.0f);
+    n.amplitudMax = limitarF(n.amplitudMax, n.sensBase * 2.0f, 20000.0f);
+    n.umbralPulsera = (uint32_t)limitarF((float)n.umbralPulsera, 1000.0f, 250000.0f);
+    n.bpmMin = (uint8_t)limitarF(n.bpmMin, 25, 80);
+    n.bpmMax = (uint8_t)limitarF(n.bpmMax, 100, 220);
+    n.spo2A = limitarF(n.spo2A, 80.0f, 130.0f);
+    n.spo2B = limitarF(n.spo2B, 0.0f, 50.0f);
+    bool cambiaHardware = (n.led != cfgMax.led) || (n.promedio != cfgMax.promedio);
+    cfgMax = n;
+    // El I2C no se puede usar desde aca: la tarea del MAX aplica el cambio con el bus tomado
+    if (cambiaHardware) cfgMaxPendiente = true;
+}
+
+// Aplica LED y promedio al sensor (se llama con el bus I2C tomado)
+static void aplicarHardwarePendienteMAX() {
+    if (!cfgMaxPendiente || !sensorIniciado) return;
+    cfgMaxPendiente = false;
+    sensor.setFIFOAverage(promedioARegistro(cfgMax.promedio));
+    if (!sensorDormido) {
+        sensor.setPulseAmplitudeIR(cfgMax.led);
+        sensor.setPulseAmplitudeRed(pulseraPuesta ? cfgMax.led : 0);
+    }
+}
+
+void guardarConfigMAX() {
+    Preferences prefs;
+    prefs.begin("max", false);
+    prefs.putUChar("led", cfgMax.led);
+    prefs.putUChar("prom", cfgMax.promedio);
+    prefs.putFloat("sens", cfgMax.sensBase);
+    prefs.putFloat("smax", cfgMax.sensMax);
+    prefs.putFloat("amp", cfgMax.amplitudMax);
+    prefs.putULong("pulsera", cfgMax.umbralPulsera);
+    prefs.putUChar("bmin", cfgMax.bpmMin);
+    prefs.putUChar("bmax", cfgMax.bpmMax);
+    prefs.putFloat("sa", cfgMax.spo2A);
+    prefs.putFloat("sb", cfgMax.spo2B);
+    prefs.end();
+}
+
+void restaurarConfigMAX() {
+    aplicarConfigMAX(CONFIG_MAX_FABRICA);
+    guardarConfigMAX();
+}
+
+void activarCalibracionMAX(bool activo) {
+    calibMax = activo;
+    inicioCalibMax = millis();
+    calibMaxCantidad = 0;
+    calibMaxMascara = 0;
+}
+
+bool enCalibracionMAX() {
+    if (calibMax && millis() - inicioCalibMax >= CALIB_MAX_DURACION_MS) activarCalibracionMAX(false);
+    return calibMax;
+}
+
+// Junta muestras de la onda y las manda a la app de a 4
+static void registrarMuestraCalibMAX(float valorIR, bool latidoDetectado, bool latidoAceptado, int bpmActual) {
+    if (!calibMax) return;
+    uint32_t v = valorIR < 0 ? 0 : (uint32_t)valorIR;
+    if (v > 0xFFFFFF) v = 0xFFFFFF;
+    if (latidoDetectado) calibMaxMascara |= (1 << calibMaxCantidad);
+    if (latidoAceptado) calibMaxMascara |= (1 << (4 + calibMaxCantidad));
+    calibMaxMuestras[calibMaxCantidad++] = v;
+    if (calibMaxCantidad < CALIB_MAX_MUESTRAS_POR_PAQUETE) return;
+
+    uint8_t paquete[1 + CALIB_MAX_MUESTRAS_POR_PAQUETE * 3 + 6];
+    size_t i = 0;
+    paquete[i++] = calibMaxCantidad;
+    for (uint8_t k = 0; k < calibMaxCantidad; k++) {
+        paquete[i++] = calibMaxMuestras[k] & 0xFF;
+        paquete[i++] = (calibMaxMuestras[k] >> 8) & 0xFF;
+        paquete[i++] = (calibMaxMuestras[k] >> 16) & 0xFF;
+    }
+    uint8_t estado = !pulseraPuesta ? 0 : (millis() - tiempoInicioToque < TIEMPO_ESTABILIZACION_MS ? 1 : 2);
+    uint16_t r = (uint16_t)limitarF(ultimoR * 1000.0f, 0, 65000);
+    paquete[i++] = calibMaxMascara;
+    paquete[i++] = (uint8_t)(bpmActual > 0 ? bpmActual : 0);
+    paquete[i++] = (uint8_t)(spo2Definitivo > 0 ? spo2Definitivo : 0);
+    paquete[i++] = estado;
+    paquete[i++] = r & 0xFF;
+    paquete[i++] = r >> 8;
+    enviarCalibracionMaxBLE(paquete, i);
+    calibMaxCantidad = 0;
+    calibMaxMascara = 0;
+}
+
+static void consumirMuestras();
+
 static void resetearVariablesMAX() {
-    picoMaximo = 0.0; 
+    picoMaximo = 0.0;
     minimoLocal = 999999.0;
+    ultimoPicoLatido = 0.0;
+    sensibilidadDinamica = CAIDA_MINIMA_IR_BASE;
     bpmPromedio = 0;
     for (byte i = 0 ; i < CANTIDAD_LATIDOS_FILTRO ; i++) ultimosBPM[i] = 0;
+    indiceBPM = 0;
+    latidosGuardados = 0;
+    atipicosSeguidos = 0;
+    bpmSuavizado = 0.0f;
+    tUltimoLatidoMs = 0.0f;
     buscandoPico = true;
     primerLatidoDetectado = false;
     tiempoUltimoLatido = millis();
