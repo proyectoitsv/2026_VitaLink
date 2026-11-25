@@ -12,6 +12,8 @@
 
 *Proyecto integrador · 7.° año B · Electrónica · Instituto Técnico Salesiano Villada · Córdoba, Argentina · 2026*
 
+<img src="Assets/renders/render_pulsera.jpg" alt="Render 3D de la pulsera VitaLink" width="720">
+
 </div>
 
 ---
@@ -114,6 +116,13 @@ Modelados en **Fusion 360** e impresos en 3D (archivos en `Diseño 3d/`):
 - **Pulsera:** base con ventana óptica para el sensor de pulso y anclajes de la correa, y tapa con las chapas metálicas (zonas táctiles S.O.S. y Cancelar, y pads de carga).
 - **Cargador magnético:** dos piezas que se apoyan **sobre** la pulsera. Sus pogo pins tocan los pads de carga, así el adulto **no tiene que sacarse la pulsera para cargarla** y nunca queda desprotegido.
 
+| Cara con las chapas | Por dentro | Con el cargador |
+| :---: | :---: | :---: |
+| ![Cara de la pulsera](Assets/renders/render_frente.jpg) | ![Despiece](Assets/renders/render_despiece.jpg) | ![Pulsera con el cargador](Assets/renders/render_cargador.jpg) |
+| Zonas táctiles S.O.S. y Cancelar, y pads de carga | Tapa, placa, batería y base con la ventana del sensor | El cargador se apoya encima de la pulsera |
+
+*Renders generados a partir del modelo 3D real de la carcasa (`Diseño 3d/vitalink_case`).*
+
 ---
 
 ## 💻 Firmware
@@ -199,7 +208,7 @@ La pulsera se actualiza **por Bluetooth desde la app**. Al compilar, el script [
 
 ## 📱 Aplicación móvil
 
-Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Cloud Firestore en tiempo real, Cloud Messaging y Cloud Functions. El código está en la rama [`feature-aplicacion-movil`](../../tree/feature-aplicacion-movil), carpeta `software/VitaLink`.
+Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Cloud Firestore en tiempo real, Cloud Messaging y Cloud Functions. El código está en [`software/VitaLink`](software/VitaLink) y las Cloud Functions en [`software/firebase-functions`](software/firebase-functions).
 
 | Inicio | Paciente | Familiar | Alerta de caída |
 | :---: | :---: | :---: | :---: |
@@ -231,21 +240,30 @@ Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Clou
 
 ```
 2026_VitaLink/
-├── Firmware/VitaLink/        # Firmware de la pulsera (PlatformIO)
-│   ├── src/                  #   main, detección de caídas, MAX30102, BLE, OTA, batería
-│   ├── include/              #   cabeceras
+├── Firmware/VitaLink/            # Firmware de la pulsera (PlatformIO)
+│   ├── src/                      #   main, detección de caídas, MAX30102, BLE, OTA, batería
+│   ├── include/                  #   cabeceras
 │   ├── platformio.ini
-│   └── publicar_ota.py       #   publica cada compilación para la actualización OTA
+│   └── publicar_ota.py           #   publica cada compilación para la actualización OTA
+├── software/
+│   ├── VitaLink/                 # Aplicación móvil (React Native + Expo)
+│   ├── firebase-functions/       # Cloud Functions (notificaciones push de las alertas)
+│   └── apk/VitaLink.apk          # APK lista para instalar en Android
 ├── Hardware/MainBoard_VitaLink/  # Proyecto de Altium, esquemático (PDF) y Gerbers
-├── Diseño 3d/                # Carcasa y cargador (Fusion 360)
-└── Assets/                   # Imágenes del README
+├── Diseño 3d/                    # Carcasa y cargador: vitalink_case (.f3d, .step, .stl)
+├── capturas/                     # Capturas de la aplicación
+├── Assets/                       # Imágenes y renders del README
+├── Informe Proyecto.md           # Evolución del proyecto, decisiones y consideraciones
+└── feedback.md                   # Notas de las reuniones de seguimiento
 ```
 
 | Rama | Contenido |
 |---|---|
-| `main` | Rama principal |
-| `feature-integracion-de-codigo` | Firmware completo integrado |
-| `feature-aplicacion-movil` | Aplicación móvil (`software/VitaLink`) y Cloud Functions (`software/firebase-functions`) |
+| `main` | **Todo el proyecto** |
+| `feature-integracion-de-codigo` | Desarrollo del firmware |
+| `feature-aplicacion-movil` | Desarrollo de la aplicación móvil |
+
+> La historia completa del proyecto (componentes descartados, versiones de la placa, problemas y soluciones) está en el [**Informe del proyecto**](Informe%20Proyecto.md).
 
 ---
 
@@ -267,6 +285,7 @@ npx expo run:android          # desarrollo con un celular conectado
 cd android && ./gradlew assembleRelease   # APK de release
 ```
 
+> La APK ya compilada está en [`software/apk/VitaLink.apk`](software/apk/VitaLink.apk).
 > Hace falta el archivo `google-services.json` del proyecto de Firebase.
 > Compilando con `VITALINK_DEMO=1`, la app usa datos simulados (sin pulsera ni Firebase), por ejemplo para sacar capturas.
 
@@ -286,6 +305,7 @@ cd android && ./gradlew assembleRelease   # APK de release
 - Necesita el celular del paciente cerca para avisar.
 - Una caída muy lenta (por ejemplo, deslizarse de una silla) puede no tener caída libre: para eso está el botón S.O.S.
 - El pulso y el oxígeno se **monitorean** en la app, pero todavía no generan alertas automáticas.
+- Con el cargador puesto, el cargador replica la zona S.O.S. pero todavía no la de **Cancelar**.
 
 **Próximos pasos**
 
