@@ -42,6 +42,7 @@
 #define MOTOR_ERROR       2   // 2 pulsos medios: S.O.S. sin conexion con el celular
 #define MOTOR_TOQUE       3   // Pulso corto: toque registrado
 #define MOTOR_SOS         4   // Pulso largo (1,5 s): S.O.S. enviado
+#define MOTOR_CARGA       5   // 3 pulsos cada vez mas largos: empezo a cargar
 
 #define WDT_TIMEOUT_S     10  // Si una tarea se cuelga mas de 10 s, la pulsera se reinicia sola
 
@@ -70,7 +71,7 @@
 #define TACTIL_GUARDAR_CADA_MS    (10UL * 60UL * 1000UL)  // Como mucho cada 10 min (cuida la flash)
 #define TACTIL_CAMBIO_MIN         0.05f                  // Solo se guarda si cambio mas de 5%
 
-const char* VERSION_FIRMWARE = "1.0.46";
+const char* VERSION_FIRMWARE = "1.0.47";
 const bool SENSAR_BATERIA = true;       // Cambiar a false para deshabilitar el sensado de bateria
 
 SemaphoreHandle_t i2cMutex;
@@ -132,21 +133,21 @@ void TaskBLE(void *pvParameters) {
             entrarEnSuenoProfundo();
         }
 
-        if (dispositivoConectado && !estaActualizandoOTA()) {
-            // La bateria se lee cada 1 s para notar rapido el cargador; se envia cada 5 s
-            // o al instante si se enchufo o se desenchufo
-            if (SENSAR_BATERIA && (millis() - ultimaLecturaBateria >= 1000)) {
-                ultimaLecturaBateria = millis();
-                bool cargabaAntes = estaCargando();
-                int bateria = llamarParaPorcentaje();
-                if (estaCargando() != cargabaAntes || ultimoEnvioBateria == 0 || millis() - ultimoEnvioBateria >= 5000) {
-                    ultimoEnvioBateria = millis();
-                    enviarBateriaBLE(bateria, estaCargando());
-                }
+        // La bateria se lee cada 1 s (con o sin celular) para notar rapido el cargador
+        if (SENSAR_BATERIA && !estaActualizandoOTA() && (millis() - ultimaLecturaBateria >= 1000)) {
+            ultimaLecturaBateria = millis();
+            bool cargabaAntes = estaCargando();
+            int bateria = llamarParaPorcentaje();
+            bool cambioCarga = estaCargando() != cargabaAntes;
+            // Se puso a cargar: vibracion propia para que la persona sepa que esta cargando
+            if (cambioCarga && estaCargando()) patronMotor = MOTOR_CARGA;
+            // Al celular se envia cada 5 s, o al instante si se enchufo o se desenchufo
+            if (dispositivoConectado && (cambioCarga || ultimoEnvioBateria == 0 || millis() - ultimoEnvioBateria >= 5000)) {
+                ultimoEnvioBateria = millis();
+                enviarBateriaBLE(bateria, estaCargando());
             }
-        } else {
-            ultimoEnvioBateria = 0;
         }
+        if (!dispositivoConectado) ultimoEnvioBateria = 0;
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -359,6 +360,11 @@ void TaskMotor(void *pvParameters) {
         } else if (patron == MOTOR_ERROR) {
             pulsoMotor(400, 200);
             pulsoMotor(400, 100);
+        } else if (patron == MOTOR_CARGA) {
+            // "cargando": tres pulsos que van creciendo
+            pulsoMotor(70, 130);
+            pulsoMotor(140, 130);
+            pulsoMotor(300, 100);
         } else if (alarmaVibrando()) {
             // Aviso en curso: vibrar en pulsos hasta que se cancele
             if (avisoVisto()) pulsoAlarma(200, 2800);
