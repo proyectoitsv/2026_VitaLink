@@ -29,6 +29,7 @@ bool avisoVisto();              // true si un familiar ya vio el aviso en curso
 void marcarAvisoActivo();       // Se envio un S.O.S.: hay un aviso en curso
 bool hayAvisoActivo();          // Hay una caida o un S.O.S. sin cerrar
 bool esperarMuestraMPU(uint32_t timeoutMs);   // Espera la interrupcion de muestra nueva (o el tiempo maximo)
+uint32_t esperaSugeridaMPU();                 // Corta mientras se mide, larga mientras el MPU vigila solo
 float obtenerNivelMovimiento();               // Movimiento de la muñeca en g (promedio de |a - 1g|)
 
 // Calibracion

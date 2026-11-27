@@ -16,12 +16,24 @@
 #define REG_SMPLRT_DIV        0x19
 #define REG_INT_PIN_CFG       0x37
 #define REG_INT_ENABLE        0x38
+#define REG_INT_STATUS        0x3A
+#define REG_FF_THR            0x1D    // Umbral de caida libre por eje (2 mg por unidad)
+#define REG_FF_DUR            0x1E    // Duracion minima de la caida libre (1 ms por unidad)
+#define REG_WHO_AM_I          0x75
+#define INT_CAIDA_LIBRE       0x80
+#define INT_DATO_LISTO        0x01
 
 // Pin INT del MPU6050 (avisa cada muestra nueva, 50 por segundo)
 #define PIN_INT_MPU           D0
 
 // Confirmacion de caida: despues del impacto la persona tiene que quedar quieta
 #define TIEMPO_REBOTE_MS          500     // Se ignoran los primeros 500 ms despues del impacto
+
+// Vigilancia por hardware: el MPU detecta solo la caida libre y despierta al ESP32 por INT
+#define FF_EJE_MAX_G          0.50f   // Por eje: en reposo cada eje puede quedar en ~0,58 g
+#define FF_DUR_MS             20      // La caida libre tiene que durar al menos esto
+#define VENTANA_MUESTREO_MS   3500    // Despues de despertar, muestrear a 50 Hz este tiempo
+#define ESPERA_VIGILANCIA_MS  1000    // En vigilancia la tarea duerme hasta la interrupcion
 
 // Valores de fabrica de los parametros (se pueden cambiar desde la app)
 static const ConfigCaidas CONFIG_FABRICA = {
@@ -81,6 +93,12 @@ static volatile float nivel_movimiento = 0.0f;
 static SemaphoreHandle_t sem_muestra_mpu = NULL;
 static bool interrupcion_mpu_activa = false;
 
+// Vigilancia por caida libre
+static bool soporta_caida_libre = false;     // solo el MPU6050 original (WHO_AM_I = 0x68)
+static bool en_vigilancia = false;
+static volatile bool pedir_muestreo = false;
+static unsigned long muestreo_desde = 0;
+
 static bool estado_alarma = false;
 
 // Vibracion de la alarma mientras haya un aviso en curso
@@ -98,6 +116,15 @@ static bool escribirRegistroMPU(uint8_t addr, uint8_t reg, uint8_t val) {
   Wire.write(reg);
   Wire.write(val);
   return (Wire.endTransmission() == 0);
+}
+
+static bool leerRegistroMPU(uint8_t addr, uint8_t reg, uint8_t &valor) {
+  Wire.beginTransmission(addr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(addr, (uint8_t)1, (uint8_t)true) != 1) return false;
+  valor = Wire.read();
+  return true;
 }
 
 static bool probarDireccionMPU(uint8_t addr) {
@@ -120,8 +147,38 @@ static bool configurarHardwareMPU(uint8_t addr) {
   // INT activo en alto, push-pull, se mantiene hasta leer cualquier registro (0x30)
   escribirRegistroMPU(addr, REG_INT_PIN_CFG, 0x30);
   // Interrupcion de "dato listo"
-  escribirRegistroMPU(addr, REG_INT_ENABLE, 0x01);
+  escribirRegistroMPU(addr, REG_INT_ENABLE, INT_DATO_LISTO);
+  en_vigilancia = false;
+  muestreo_desde = millis();
   return true;
+}
+
+// Deja al MPU vigilando solo: avisa por INT unicamente cuando detecta caida libre
+static void armarVigilancia() {
+  float umbralEje = cfg.caidaLibreG < FF_EJE_MAX_G ? cfg.caidaLibreG : FF_EJE_MAX_G;
+  int cuentas = (int)(umbralEje * 500.0f);   // 2 mg por unidad
+  if (cuentas < 1) cuentas = 1;
+  if (cuentas > 255) cuentas = 255;
+  escribirRegistroMPU(mpu_addr, REG_FF_THR, (uint8_t)cuentas);
+  escribirRegistroMPU(mpu_addr, REG_FF_DUR, FF_DUR_MS);
+  escribirRegistroMPU(mpu_addr, REG_INT_ENABLE, INT_CAIDA_LIBRE);
+  uint8_t pendiente;
+  leerRegistroMPU(mpu_addr, REG_INT_STATUS, pendiente);   // limpia un aviso viejo
+  if (sem_muestra_mpu) xSemaphoreTake(sem_muestra_mpu, 0);
+  en_vigilancia = true;
+  nivel_movimiento = 0.0f;
+}
+
+// Vuelve a leer el acelerometro a 50 Hz
+static void activarMuestreo(unsigned long ahora) {
+  escribirRegistroMPU(mpu_addr, REG_INT_ENABLE, INT_DATO_LISTO);
+  en_vigilancia = false;
+  muestreo_desde = ahora;
+}
+
+// Cuanto esperar la proxima interrupcion: en vigilancia la tarea duerme
+uint32_t esperaSugeridaMPU() {
+  return en_vigilancia ? ESPERA_VIGILANCIA_MS : 25;
 }
 
 static void IRAM_ATTR isrMuestraMPU() {
@@ -258,6 +315,7 @@ void restaurarConfigCaidas() {
 
 void activarModoCalibracion(bool activo) {
   modo_calibracion = activo;
+  if (activo) pedir_muestreo = true;
   inicio_calibracion = millis();
   calib_cantidad = 0;
   calib_evento = EVENTO_NINGUNO;
@@ -318,6 +376,10 @@ void inicializarDetector() {
     mpu_iniciado = false;
     return;
   }
+
+  // Solo el MPU6050 original tiene deteccion de caida libre (el MPU6500 responde 0x70)
+  uint8_t modelo = 0;
+  soporta_caida_libre = leerRegistroMPU(mpu_addr, REG_WHO_AM_I, modelo) && modelo == 0x68;
 
   prepararInterrupcionMPU();
   mpu_iniciado = true;
@@ -390,6 +452,34 @@ void detectarCaidas() {
       estado_alarma = false;
       enviarAlertaCaidaBLE(false);
     }
+    return;
+  }
+
+  if (pedir_muestreo) {
+    pedir_muestreo = false;
+    if (en_vigilancia) activarMuestreo(ahora);
+  }
+
+  // El MPU vigila solo: sin caida libre no se lee ninguna muestra
+  if (en_vigilancia) {
+    uint8_t estado = 0;
+    if (!leerRegistroMPU(mpu_addr, REG_INT_STATUS, estado)) {
+      mpu_iniciado = false;
+      return;
+    }
+    if (!(estado & INT_CAIDA_LIBRE)) return;
+    // El MPU vio la caida libre: seguir midiendo a 50 Hz para ver si hay impacto
+    activarMuestreo(ahora);
+    posible_caida_libre = true;
+    tiempo_caida_libre = ahora - FF_DUR_MS;
+    primera_muestra = true;
+    return;
+  }
+
+  // Sin nada en curso, despues de un rato el MPU vuelve a vigilar solo
+  if (soporta_caida_libre && interrupcion_mpu_activa && !modo_calibracion && !posible_caida_libre && !confirmando_caida &&
+      ahora - muestreo_desde >= VENTANA_MUESTREO_MS) {
+    armarVigilancia();
     return;
   }
 

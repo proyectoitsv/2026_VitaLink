@@ -69,7 +69,7 @@
 #define TACTIL_GUARDAR_CADA_MS    (10UL * 60UL * 1000UL)  // Como mucho cada 10 min (cuida la flash)
 #define TACTIL_CAMBIO_MIN         0.05f                  // Solo se guarda si cambio mas de 5%
 
-const char* VERSION_FIRMWARE = "1.0.43";
+const char* VERSION_FIRMWARE = "1.0.44";
 const bool SENSAR_BATERIA = true;       // Cambiar a false para deshabilitar el sensado de bateria
 
 SemaphoreHandle_t i2cMutex;
@@ -290,8 +290,8 @@ void TaskMPU6050(void *pvParameters) {
         if (pulseraEnMuneca || !sensorMAXDisponible()) munecaVistaEn = millis();
         bool puesta = munecaVistaEn != 0 && millis() - munecaVistaEn < GRACIA_SIN_MUNECA_MS;
         if (dispositivoConectado && !estaActualizandoOTA() && (puesta || enModoCalibracion())) {
-            // Esperar la muestra nueva del acelerometro (interrupcion en D0, 50 por segundo)
-            esperarMuestraMPU(25);
+            // Esperar la interrupcion del MPU en D0: muestra nueva (50 por segundo) o caida libre si esta vigilando solo
+            esperarMuestraMPU(esperaSugeridaMPU());
             if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
                 if (estaDetectorDormido()) {
                     despertarDetector();
