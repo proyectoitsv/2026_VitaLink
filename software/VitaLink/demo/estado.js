@@ -242,6 +242,8 @@ const ejecutar = (comando, arg) => {
       break;
     case 'bateria_baja': pulseraVirtual.bateria = 12; break;
     case 'bateria_ok': pulseraVirtual.bateria = 82; break;
+    case 'cargando_on': pulseraVirtual.cargando = true; break;
+    case 'cargando_off': pulseraVirtual.cargando = false; break;
     case 'familia_on': vincularFamilia(true); break;
     case 'familia_off': vincularFamilia(false); break;
     case 'ir': {

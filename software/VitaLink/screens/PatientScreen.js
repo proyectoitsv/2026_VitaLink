@@ -44,6 +44,7 @@ export default function PatientScreen({ navigation }) {
   const [bpm, setBpm] = useState('--');
   const [spo2, setSpo2] = useState('--');
   const [bateria, setBateria] = useState('--');
+  const [cargando, setCargando] = useState(false);
   const [alertaCaida, setAlertaCaida] = useState('0');
   const [alertaSOS, setAlertaSOS] = useState('0');
 
@@ -342,6 +343,7 @@ export default function PatientScreen({ navigation }) {
           bpm: datosRef.current.bpm,
           spo2: datosRef.current.spo2,
           bateria: datosRef.current.bateria,
+          cargando: !!datosRef.current.cargando,
           estadoSensor: estadoSensorRef.current,
           timestamp: serverTimestamp()
         };
@@ -471,8 +473,9 @@ export default function PatientScreen({ navigation }) {
     setBpm('--');
     setSpo2('--');
     setBateria('--');
+    setCargando(false);
     setFirmwareVersion('--');
-    datosRef.current = { bpm: '--', spo2: '--', bateria: '--', alertaCaida: '0', alertaSOS: '0' };
+    datosRef.current = { bpm: '--', spo2: '--', bateria: '--', cargando: false, alertaCaida: '0', alertaSOS: '0' };
     if (!isUpdatingOtaRef.current) {
       setDisconnectNotice(true);
     }
@@ -861,10 +864,14 @@ export default function PatientScreen({ navigation }) {
         if (error) return;
         if (characteristic?.value) {
           lastDataTimestampRef.current = Date.now();
-          const val = decodeBase64(characteristic.value);
-          setBateria(val);
-          detectorBateriaRef.current(val);
-          datosRef.current.bateria = val;
+          // La pulsera manda "porcentaje;cargando" (por ejemplo "85;1")
+          const [pct, carga] = decodeBase64(characteristic.value).split(';');
+          const enCarga = carga === '1';
+          setBateria(pct);
+          setCargando(enCarga);
+          if (!enCarga) detectorBateriaRef.current(pct);
+          datosRef.current.bateria = pct;
+          datosRef.current.cargando = enCarga;
         }
       });
       subscriptionsRef.current.push(subBat);
@@ -1449,7 +1456,7 @@ export default function PatientScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              <VitalsPanel bpm={bpm} spo2={spo2} bateria={bateria} estado={estadoSensor} calibInicioMs={calibInicioMs} />
+              <VitalsPanel bpm={bpm} spo2={spo2} bateria={bateria} cargando={cargando} estado={estadoSensor} calibInicioMs={calibInicioMs} />
 
               {ubicacionProblema && (
                 <Animatable.View animation="fadeInUp" duration={450}>

@@ -242,7 +242,8 @@ function PatientListItem({ item, db, onPress, onRemove, aterrizar = 0 }) {
   const tsMs = vitals?.timestamp?.toMillis ? vitals.timestamp.toMillis() : 0;
   const isOnline = !!tsMs && Date.now() - tsMs < 25000 && vitals?.bpm && vitals.bpm !== '--';
   const batNum = parseInt(vitals?.bateria, 10);
-  const batBaja = isOnline && !isNaN(batNum) && batNum > 0 && batNum <= 20;
+  const enCarga = isOnline && !!vitals?.cargando;
+  const batBaja = isOnline && !enCarga && !isNaN(batNum) && batNum > 0 && batNum <= 20;
 
   return (
     <Animatable.View animation="fadeInUp" duration={400}>
@@ -314,7 +315,7 @@ function PatientListItem({ item, db, onPress, onRemove, aterrizar = 0 }) {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
-            <MaterialCommunityIcons name={batBaja ? 'battery-low' : 'battery'} size={16} color={batBaja ? colors.warn : colors.ok} />
+            <MaterialCommunityIcons name={enCarga ? 'battery-charging' : batBaja ? 'battery-low' : 'battery'} size={16} color={batBaja ? colors.warn : colors.ok} />
             <Text style={[styles.statValue, batBaja && { color: colors.warn }]}>{isOnline ? mostrarValor(vitals.bateria) : '--'}</Text>
             <Text style={styles.statUnit}>%</Text>
           </View>

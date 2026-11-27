@@ -83,8 +83,9 @@ const conectar = () => {
   inicioConexion = Date.now();
   if (pulseraVirtual.modo === 'medir') pulseraVirtual.modo = 'midiendo_inicial';
   temporizadores.push(setInterval(tickSignos, 1000));
-  temporizadores.push(setInterval(() => notificarTexto(C.BAT, String(pulseraVirtual.bateria)), 5000));
-  setTimeout(() => notificarTexto(C.BAT, String(pulseraVirtual.bateria)), 1200);
+  const textoBateria = () => `${pulseraVirtual.bateria};${pulseraVirtual.cargando ? 1 : 0}`;
+  temporizadores.push(setInterval(() => notificarTexto(C.BAT, textoBateria()), 5000));
+  setTimeout(() => notificarTexto(C.BAT, textoBateria()), 1200);
 };
 
 // ---------------------------------------------------------------- calibración en vivo

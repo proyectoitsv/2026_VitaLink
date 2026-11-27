@@ -13,17 +13,48 @@ export const mostrarValor = (v) => {
   return s;
 };
 
-const BatteryIcon = ({ value }) => {
+const BatteryIcon = ({ value, cargando = false }) => {
   const n = parseInt(value, 10);
   const valid = !isNaN(n) && n >= 0;
   const pct = valid ? Math.max(0, Math.min(100, n)) : 0;
-  const color = !valid ? colors.textFaint : pct <= 20 ? colors.danger : pct <= 40 ? colors.warn : colors.ok;
+  const color = !valid ? colors.textFaint : cargando ? colors.ok : pct <= 20 ? colors.danger : pct <= 40 ? colors.warn : colors.ok;
+  // Cargando: un brillo recorre la batería y el rayo late al costado
+  const brillo = useRef(new Animated.Value(0)).current;
+  const latido = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!cargando) { brillo.setValue(0); latido.setValue(0); return undefined; }
+    const loopBrillo = Animated.loop(Animated.sequence([
+      Animated.timing(brillo, { toValue: 1, duration: 1300, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      Animated.delay(500),
+      Animated.timing(brillo, { toValue: 0, duration: 0, useNativeDriver: true }),
+    ]));
+    const loopLatido = Animated.loop(Animated.sequence([
+      Animated.timing(latido, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(latido, { toValue: 0, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ]));
+    loopBrillo.start(); loopLatido.start();
+    return () => { loopBrillo.stop(); loopLatido.stop(); };
+  }, [cargando]);
   return (
     <View style={styles.batWrap}>
       <View style={[styles.batBody, { borderColor: color }]}>
         <View style={[styles.batFill, { width: `${Math.max(pct, valid ? 6 : 0)}%`, backgroundColor: color }]} />
+        {cargando ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.batBrillo, { transform: [{ translateX: brillo.interpolate({ inputRange: [0, 1], outputRange: [-24, 60] }) }, { skewX: '-20deg' }] }]}
+          />
+        ) : null}
       </View>
       <View style={[styles.batCap, { backgroundColor: color }]} />
+      {cargando ? (
+        <Animated.View style={[styles.batRayo, {
+          transform: [{ scale: latido.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] }) }],
+          opacity: latido.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }),
+        }]}>
+          <MaterialCommunityIcons name="lightning-bolt" size={15} color="#FFF" />
+        </Animated.View>
+      ) : null}
     </View>
   );
 };
@@ -71,7 +102,7 @@ function PulseraFueraCard() {
  * estado: 'calibrando' | 'midiendo' | 'pausa' | 'sin_muneca' | 'esperando'
  * calibInicioMs: cuándo empezó la estabilización (para la barra de progreso de 15 s)
  */
-export default function VitalsPanel({ bpm, spo2, bateria, estado, compact = false, calibInicioMs = null }) {
+export default function VitalsPanel({ bpm, spo2, bateria, cargando = false, estado, compact = false, calibInicioMs = null }) {
   const calibrando = estado === 'calibrando';
   const midiendo = estado === 'midiendo' || calibrando;
   // En la pausa entre mediciones todo conserva sus colores; solo se apaga a gris sin medición
@@ -87,7 +118,7 @@ export default function VitalsPanel({ bpm, spo2, bateria, estado, compact = fals
   const etiquetaValor = estado === 'pausa' ? 'Última medición' : calibrando ? 'Midiendo...' : midiendo ? 'En vivo' : null;
 
   const batNum = parseInt(bateria, 10);
-  const bateriaBaja = !isNaN(batNum) && batNum > 0 && batNum <= 20;
+  const bateriaBaja = !cargando && !isNaN(batNum) && batNum > 0 && batNum <= 20;
 
   return (
     <View>
@@ -162,9 +193,15 @@ export default function VitalsPanel({ bpm, spo2, bateria, estado, compact = fals
         <Animatable.View animation="fadeInUp" delay={160} duration={450} style={[styles.card, styles.smallCard, { marginLeft: 7 }]}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Batería</Text>
+            {cargando ? (
+              <View style={styles.cargandoPill}>
+                <MaterialCommunityIcons name="lightning-bolt" size={12} color={colors.ok} />
+                <Text style={styles.cargandoTxt}>Cargando</Text>
+              </View>
+            ) : null}
           </View>
           <View style={[styles.smallIcon, { height: compact ? 76 : 87 }]}>
-            <BatteryIcon value={bateria} />
+            <BatteryIcon value={bateria} cargando={cargando} />
           </View>
           <View style={styles.valueRow}>
             <Text style={styles.midValue}>{mostrarValor(bateria)}</Text>
@@ -181,6 +218,10 @@ export default function VitalsPanel({ bpm, spo2, bateria, estado, compact = fals
 }
 
 const styles = StyleSheet.create({
+  cargandoPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, height: 22, borderRadius: 11, backgroundColor: `${colors.ok}1F` },
+  cargandoTxt: { color: colors.ok, fontSize: 11, fontWeight: '800', marginLeft: 3 },
+  batRayo: { width: 24, height: 24, borderRadius: 12, marginLeft: 8, backgroundColor: colors.ok, alignItems: 'center', justifyContent: 'center' },
+  batBrillo: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 14, backgroundColor: 'rgba(255,255,255,0.45)' },
   batBanner: { flexDirection: 'row', alignItems: 'center', marginTop: 14, padding: 14, borderRadius: radius.md, backgroundColor: `${colors.warn}14`, borderWidth: 1, borderColor: `${colors.warn}55` },
   batBannerCritical: { backgroundColor: `${colors.danger}18`, borderColor: `${colors.danger}66` },
   batBannerTitle: { fontSize: 14, fontWeight: '800' },
@@ -213,7 +254,7 @@ const styles = StyleSheet.create({
   smallCard: { flex: 1 },
   smallIcon: { alignItems: 'flex-start', marginLeft: -12, marginVertical: 2 },
   batWrap: { flexDirection: 'row', alignItems: 'center', marginLeft: 16, marginTop: 28 },
-  batBody: { width: 58, height: 28, borderRadius: 7, borderWidth: 2.5, padding: 3, justifyContent: 'center' },
+  batBody: { width: 58, height: 28, borderRadius: 7, borderWidth: 2.5, padding: 3, justifyContent: 'center', overflow: 'hidden' },
   batFill: { height: '100%', borderRadius: 3 },
   batCap: { width: 4, height: 12, borderTopRightRadius: 2, borderBottomRightRadius: 2, marginLeft: 2 },
 });

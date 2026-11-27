@@ -321,7 +321,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
               <EmergencyVitals items={[
                 { icon: 'cards-heart', value: mostrarValor(signos?.bpm), unit: 'LPM', label: 'Pulso' },
                 { icon: 'water', value: mostrarValor(signos?.spo2), unit: '%', label: 'Oxígeno' },
-                { icon: 'battery', value: mostrarValor(signos?.bateria), unit: '%', label: 'Batería' },
+                { icon: signos?.cargando ? 'battery-charging' : 'battery', value: mostrarValor(signos?.bateria), unit: '%', label: signos?.cargando ? 'Cargando' : 'Batería' },
               ]} />
             </Animatable.View>
 
@@ -390,7 +390,7 @@ export default function FamilyDashboardScreen({ navigation, route }) {
 
             {signos ? (
               <View style={styles.content}>
-                <VitalsPanel bpm={isLive ? signos.bpm : '--'} spo2={isLive ? signos.spo2 : '--'} bateria={isLive ? signos.bateria : '--'} estado={estadoSensor} />
+                <VitalsPanel bpm={isLive ? signos.bpm : '--'} spo2={isLive ? signos.spo2 : '--'} bateria={isLive ? signos.bateria : '--'} cargando={isLive && !!signos.cargando} estado={estadoSensor} />
 
                 <View style={styles.safeCard}>
                   <View style={styles.safeIcon}>
