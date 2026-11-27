@@ -455,10 +455,11 @@ void enviarOxigenoBLE(int spo2) {
     }
 }
 
-void enviarBateriaBLE(int porcentaje) {
+// Formato: "porcentaje;cargando" (por ejemplo "85;1")
+void enviarBateriaBLE(int porcentaje, bool cargando) {
     if (dispositivoConectado && (millis() - instanteConexionBLE >= 3000)) {
-        char buffer[10];
-        snprintf(buffer, sizeof(buffer), "%d", porcentaje);
+        char buffer[12];
+        snprintf(buffer, sizeof(buffer), "%d;%d", porcentaje, cargando ? 1 : 0);
         pCharBat->setValue((uint8_t*)buffer, strlen(buffer));
         pCharBat->notify();
     }

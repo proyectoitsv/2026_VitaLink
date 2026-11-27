@@ -11,7 +11,7 @@ void manejarDesconexionBLE();
 
 void enviarLatidosBLE(int bpm);
 void enviarOxigenoBLE(int spo2);
-void enviarBateriaBLE(int porcentaje);
+void enviarBateriaBLE(int porcentaje, bool cargando);
 void enviarAlertaCaidaBLE(bool hayCaida);
 void enviarAlertaSOSBLE(bool presionado);
 void enviarCancelacionCaidaBLE();

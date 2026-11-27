@@ -37,6 +37,12 @@ void redondeoPorcentaje();
 // Función que llama a las funciones necesarias para obtener el porcentaje de batería.
 int llamarParaPorcentaje();
 
+// Actualiza el estado de carga a partir de como cambia la tension de la bateria.
+void actualizarEstadoCarga();
+
+// Retorna true si la bateria se esta cargando (llamar despues de llamarParaPorcentaje).
+bool estaCargando();
+
 // Retorna la tensión en voltios medida en el pin ADC.
 float obtenerTension();
 

@@ -69,7 +69,7 @@
 #define TACTIL_GUARDAR_CADA_MS    (10UL * 60UL * 1000UL)  // Como mucho cada 10 min (cuida la flash)
 #define TACTIL_CAMBIO_MIN         0.05f                  // Solo se guarda si cambio mas de 5%
 
-const char* VERSION_FIRMWARE = "1.0.41";
+const char* VERSION_FIRMWARE = "1.0.43";
 const bool SENSAR_BATERIA = true;       // Cambiar a false para deshabilitar el sensado de bateria
 
 SemaphoreHandle_t i2cMutex;
@@ -104,6 +104,7 @@ static void entrarEnSuenoProfundo() {
 
 void TaskBLE(void *pvParameters) {
     unsigned long ultimoEnvioBateria = 0;
+    unsigned long ultimaLecturaBateria = 0;
     // Si se desperto de un sueño profundo, solo se queda despierta un rato corto
     esp_sleep_wakeup_cause_t causa = esp_sleep_get_wakeup_cause();
     unsigned long esperaParaDormir = ESPERA_PARA_DORMIR_MS;
@@ -127,10 +128,16 @@ void TaskBLE(void *pvParameters) {
         }
 
         if (dispositivoConectado && !estaActualizandoOTA()) {
-            if (SENSAR_BATERIA && (millis() - ultimoEnvioBateria >= 5000)) {
-                ultimoEnvioBateria = millis();
+            // La bateria se lee cada 1 s para notar rapido el cargador; se envia cada 5 s
+            // o al instante si se enchufo o se desenchufo
+            if (SENSAR_BATERIA && (millis() - ultimaLecturaBateria >= 1000)) {
+                ultimaLecturaBateria = millis();
+                bool cargabaAntes = estaCargando();
                 int bateria = llamarParaPorcentaje();
-                enviarBateriaBLE(bateria);
+                if (estaCargando() != cargabaAntes || ultimoEnvioBateria == 0 || millis() - ultimoEnvioBateria >= 5000) {
+                    ultimoEnvioBateria = millis();
+                    enviarBateriaBLE(bateria, estaCargando());
+                }
             }
         } else {
             ultimoEnvioBateria = 0;
