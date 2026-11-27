@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VitaLink · Exhibición</title>
+<style>
+@font-face{font-family:"DM Serif Display";font-style:normal;font-weight:400;src:url(fonts/dmserif-normal.woff2) format("woff2")}
+@font-face{font-family:"DM Serif Display";font-style:italic;font-weight:400;src:url(fonts/dmserif-italic.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:400;src:url(fonts/inter-400.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:500;src:url(fonts/inter-500.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:600;src:url(fonts/inter-600.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:700;src:url(fonts/inter-700.woff2) format("woff2")}
+:root{--rojo:#e5484d;--verde:#3ecf5c;--azul:#3b9cff;--glow:var(--rojo);--t2:#a7a9b6;--ease:cubic-bezier(.77,0,.18,1);--suave:cubic-bezier(.23,1,.32,1);--serif:"DM Serif Display","Times New Roman",serif}
+body.t-verde{--glow:var(--verde)} body.t-azul{--glow:var(--azul)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#050507;color:#fff;font-family:"Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased;cursor:none;user-select:none}
+#escenario{position:fixed;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden}
+#escenario.temblor{animation:temblor .5s}
+@keyframes temblor{0%,100%{translate:0 0}15%{translate:-18px 10px}30%{translate:16px -12px}45%{translate:-12px 8px}60%{translate:9px -6px}80%{translate:-4px 3px}}
+
+/* fondo */
+.fondo{position:absolute;inset:0;overflow:hidden;transition:opacity 1.2s}
+.mancha{position:absolute;border-radius:50%;filter:blur(150px);opacity:.3;background:var(--glow);transition:background 1.2s}
+.m1{width:1000px;height:1000px;top:-450px;right:-250px;animation:flota 18s ease-in-out infinite}
+.m2{width:800px;height:800px;bottom:-460px;left:-260px;opacity:.18;animation:flota 24s ease-in-out infinite reverse}
+@keyframes flota{50%{translate:-90px 80px}}
+.grilla{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:64px 64px;
+  -webkit-mask-image:radial-gradient(ellipse at center,#000 20%,transparent 72%);mask-image:radial-gradient(ellipse at center,#000 20%,transparent 72%)}
+body.oscuro .fondo{opacity:0}
+
+/* capas */
+#gl{position:absolute;inset:0;z-index:3;pointer-events:none}
+#gl canvas{display:block}
+.escena{position:absolute;inset:0;z-index:5;pointer-events:none}
+#destello{position:absolute;inset:0;z-index:7;pointer-events:none;background:radial-gradient(ellipse at center,#fff,transparent 70%);opacity:0}
+#destello.va{animation:destello .7s ease-out}
+@keyframes destello{0%{opacity:0}15%{opacity:.35}100%{opacity:0}}
+#latido{position:absolute;inset:0;z-index:8;pointer-events:none}
+#latido path{fill:none;stroke:var(--glow);stroke-width:5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 16px var(--glow));stroke-dasharray:2700;stroke-dashoffset:2700;opacity:0}
+#latido.va path{animation:barre .95s var(--ease) forwards}
+@keyframes barre{0%{stroke-dashoffset:2700;opacity:1}60%{opacity:1}100%{stroke-dashoffset:-2700;opacity:0}}
+#negro{position:absolute;inset:0;z-index:20;background:#000;opacity:0;pointer-events:none;transition:opacity .9s}
+#negro.on{opacity:1}
+
+/* textos: palabras que suben desde una máscara */
+.titulo{font-family:var(--serif);font-weight:400;font-size:150px;line-height:1.02;letter-spacing:-.01em}
+.titulo.sans{font-family:"Inter";font-weight:700;letter-spacing:-.04em}
+.w{display:inline-block;overflow:hidden;vertical-align:bottom;padding:0 .04em .08em;margin:0 -.04em -.08em}
+.w>i{display:inline-block;font-style:inherit;transform:translateY(112%) rotate(4deg);transition:transform 1s var(--suave)}
+.escena.on .w>i{transform:none;transition-delay:calc(var(--k) * 90ms + var(--b,.25s))}
+.escena.sale .w>i{transform:translateY(-112%);transition:transform .55s var(--ease);transition-delay:calc(var(--k) * 30ms)}
+.sub{font-size:46px;font-weight:500;color:#d9dae2;margin-top:30px;line-height:1.3;opacity:0;transform:translateY(24px);filter:blur(10px);transition:opacity .9s,transform 1s var(--suave),filter .9s}
+.escena.on .sub{opacity:1;transform:none;filter:none;transition-delay:var(--bs,.9s)}
+.escena.sale .sub{opacity:0;transform:translateY(-16px);filter:blur(8px);transition-delay:0s;transition-duration:.4s}
+/* al terminar de salir, los textos vuelven a su lugar de partida sin animarse (si no, cruzan la pantalla) */
+.escena.quieta *,.escena.quieta *::before,.escena.quieta *::after{transition:none!important;animation:none!important}
+.chico{font-size:24px;color:var(--t2);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.acento{color:var(--glow)}
+.marca{font-family:"Inter";font-weight:700;letter-spacing:-.04em}
+.marca b{color:var(--rojo);font-weight:700}
+.bloque{position:absolute;left:160px;top:50%;transform:translateY(-50%);width:1000px}
+.centro{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center}
+
+/* escena 2: número grande */
+.numero{font-family:"Inter";font-weight:700;font-size:250px;letter-spacing:-.05em;line-height:1;color:#fff;font-variant-numeric:tabular-nums}
+.numero small{display:block}
+.fuente{margin-top:20px;font-size:22px;color:#6d6f7c;opacity:0;transition:opacity .8s}
+.escena.on .fuente{opacity:1;transition-delay:1.6s}
+
+/* piso (escena de la caída) */
+.piso{position:absolute;left:1060px;top:860px;width:760px;height:3px;background:linear-gradient(90deg,transparent,var(--glow),transparent);opacity:0;transition:opacity .6s;box-shadow:0 0 40px var(--glow)}
+.escena.on .piso{opacity:1}
+
+/* ondas */
+.ondas{position:absolute;z-index:6;width:0;height:0;pointer-events:none}
+.ondas i{position:absolute;left:-110px;top:-110px;width:220px;height:220px;border-radius:50%;border:4px solid var(--rojo);opacity:0}
+.ondas.va i{animation:onda 1.3s ease-out 3}
+.ondas.va i:nth-child(2){animation-delay:.22s}.ondas.va i:nth-child(3){animation-delay:.44s}
+@keyframes onda{0%{transform:scale(.35);opacity:.95}100%{transform:scale(2.4);opacity:0}}
+
+/* celular */
+.escena-cel{position:absolute;inset:0;z-index:4;perspective:1800px;pointer-events:none}
+.ancla{position:absolute;left:960px;top:540px;width:0;height:0;transform-style:preserve-3d}
+.pose{transform-style:preserve-3d;transition:transform 1.4s var(--ease),opacity .9s}
+.centrar{position:absolute;transform:translate(-50%,-50%);transform-style:preserve-3d}
+.sacude.va{animation:sacude .6s}
+@keyframes sacude{0%,100%{transform:none}20%{transform:translateX(-10px) rotateZ(-2deg)}40%{transform:translateX(10px) rotateZ(2deg)}60%{transform:translateX(-6px)}80%{transform:translateX(5px)}}
+.cel{--r:52px;width:330px;height:712px;position:relative;transform-style:preserve-3d}
+.cel>.capa,.cel>.frente,.cel>.brillo{position:absolute;inset:0;border-radius:var(--r)}
+.capa{background:linear-gradient(90deg,#7a7b83,#2a2a30 30%,#2a2a30 70%,#7a7b83)}
+.brillo{transform:translateZ(-14px);box-shadow:0 0 160px 40px var(--glow);opacity:.55}
+.frente{transform:translateZ(7px);background:#050506;padding:11px;box-shadow:inset 0 0 0 2px #45464e}
+.pantalla{position:relative;width:100%;height:100%;border-radius:42px;overflow:hidden;background:#0b0c10}
+.pantalla img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;opacity:0;transition:opacity .6s}
+.pantalla img.on{opacity:1}
+.noti{position:absolute;z-index:4;top:44px;left:12px;right:12px;padding:14px 16px;border-radius:22px;background:rgba(40,12,14,.95);border:1px solid var(--rojo);box-shadow:0 12px 40px rgba(229,72,77,.55);transform:translateY(-200%);transition:transform .7s cubic-bezier(.2,1.4,.4,1);font-size:14px}
+.noti b{display:block;color:#ff9a9d;letter-spacing:.06em;font-size:14px}
+.noti.on{transform:none}
+.reflejo{position:absolute;inset:0;z-index:6;background:linear-gradient(115deg,rgba(255,255,255,.15),rgba(255,255,255,0) 34%,rgba(255,255,255,0) 70%,rgba(255,255,255,.05))}
+
+/* palabra gigante de fondo */
+#palabra{position:absolute;left:0;bottom:-70px;z-index:2;pointer-events:none;white-space:nowrap;font-family:"Inter";font-weight:700;font-size:440px;letter-spacing:-.05em;line-height:1;
+  color:transparent;-webkit-text-stroke:2px rgba(255,255,255,.075);opacity:0;transition:opacity .7s}
+#palabra.on{opacity:1}
+#palabra span{display:inline-block}
+#palabra.on span{animation:deriva 9s linear forwards}
+@keyframes deriva{from{transform:translateX(220px)}to{transform:translateX(-520px)}}
+body.oscuro #palabra{opacity:0}
+
+/* barrido de color entre escenas */
+#barrido{position:absolute;inset:0;z-index:9;pointer-events:none;background:var(--glow);clip-path:polygon(0 0,0 0,-25% 100%,-25% 100%)}
+#barrido.va{animation:barrido .95s cubic-bezier(.65,0,.35,1) forwards}
+@keyframes barrido{
+  0%{clip-path:polygon(0 0,0 0,-25% 100%,-25% 100%)}
+  45%{clip-path:polygon(0 0,125% 0,100% 100%,-25% 100%)}
+  55%{clip-path:polygon(0 0,125% 0,100% 100%,-25% 100%)}
+  100%{clip-path:polygon(125% 0,125% 0,100% 100%,100% 100%)}}
+
+/* escena del pulso */
+.vitales{position:absolute;right:170px;top:250px;display:flex;flex-direction:column;gap:28px}
+.vital{display:flex;align-items:center;gap:26px;padding:26px 48px;border-radius:32px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  opacity:0;transform:translateX(80px);transition:opacity .8s,transform 1s var(--suave)}
+.escena.on .vital{opacity:1;transform:none;transition-delay:.7s}
+.escena.on .vital+.vital{transition-delay:.95s}
+.vital b{font-size:150px;font-weight:700;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums;min-width:200px;text-align:right}
+.vital span{font-size:32px;color:var(--t2);font-weight:600}
+.vital svg{width:110px;height:110px}
+.corazon{fill:var(--rojo);filter:drop-shadow(0 0 24px var(--rojo));animation:late .85s ease-in-out infinite}
+.gota{fill:var(--azul);filter:drop-shadow(0 0 20px var(--azul))}
+@keyframes late{0%,100%{transform:scale(1)}14%{transform:scale(1.16)}28%{transform:scale(1)}42%{transform:scale(1.09)}}
+.ecg-grande{position:absolute;left:0;top:790px;width:1920px;height:240px;opacity:.55}
+.ecg-grande path{fill:none;stroke:var(--rojo);stroke-width:4;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:3200;stroke-dashoffset:3200;filter:drop-shadow(0 0 10px var(--rojo))}
+.escena.on .ecg-grande path{animation:traza 2.6s linear infinite}
+@keyframes traza{from{stroke-dashoffset:3200}to{stroke-dashoffset:0}}
+
+/* escena del S.O.S.: los tres toques */
+.toques{display:flex;gap:26px;margin-top:54px;opacity:0;transition:opacity .6s}
+.escena.on .toques{opacity:1;transition-delay:1.1s}
+.toques i{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:38px;font-weight:700;color:#8b8d99;
+  border:3px solid rgba(255,255,255,.16);transition:background .25s,border-color .25s,color .25s,box-shadow .25s,transform .25s}
+.toques i.on{background:var(--glow);border-color:var(--glow);color:#06140a;box-shadow:0 0 40px var(--glow);transform:scale(1.12)}
+.toques.listo i{transform:none}
+
+/* progreso tipo "historias" */
+#barras{position:absolute;left:160px;right:160px;top:46px;z-index:10;display:flex;gap:10px;transition:opacity .8s}
+#barras i{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden;position:relative}
+#barras i::after{content:"";position:absolute;inset:0;background:#fff;transform:scaleX(var(--p,0));transform-origin:left}
+body.oscuro #barras{opacity:0}
+#modo{position:absolute;left:160px;bottom:50px;z-index:10;font-size:20px;color:#8b8d99;letter-spacing:.06em;opacity:0;transition:opacity .5s}
+#modo.on{opacity:1}
+#modo kbd{font-family:inherit;padding:2px 9px;border:1px solid #555;border-radius:7px;color:#cfd0d8}
+.firma{position:absolute;right:160px;bottom:50px;z-index:10;font-size:22px;color:#6d6f7c;letter-spacing:.06em;transition:opacity .8s}
+.firma b{color:#cfd0d8;font-weight:600}
+body.oscuro .firma{opacity:0}
+</style>
+</head>
+<body class="oscuro">
+<main id="escenario">
+  <div class="fondo"><div class="mancha m1"></div><div class="mancha m2"></div><div class="grilla"></div></div>
+  <div id="palabra"><span></span></div>
+  <div id="gl"></div>
+  <div class="ondas" id="ondas"><i></i><i></i><i></i></div>
+
+  <!-- celular -->
+  <div class="escena-cel">
+    <div class="ancla"><div class="pose" id="poseCel" style="opacity:0;transform:translate(1200px,0) rotateY(-60deg)"><div class="centrar">
+      <div class="sacude" id="sacude"><div class="cel" id="cel">
+        <div class="brillo"></div>
+        <div class="frente"><div class="pantalla" id="pantalla">
+          <img data-p="panel" class="on" src="img/app/03_familia_panel.jpg" alt="Panel del familiar">
+          <img data-p="caida" src="img/app/04_familia_caida.jpg" alt="Alerta de caída con ubicación">
+          <div class="noti" id="noti"><b>● CAÍDA DETECTADA</b>Rosa necesita ayuda · ubicación enviada</div>
+          <div class="reflejo"></div>
+        </div></div>
+      </div></div>
+    </div></div></div>
+  </div>
+
+  <!-- 1 -->
+  <section class="escena" id="e1">
+    <div class="bloque" style="--b:3.6s;--bs:4.3s">
+      <div class="titulo sans"><span class="w"><i class="marca"><b>Vita</b>Link</i></span></div>
+      <p class="sub">La pulsera que avisa cuando alguien se cae</p>
+    </div>
+  </section>
+  <!-- 2 -->
+  <section class="escena" id="e2">
+    <div class="centro">
+      <div class="numero"><span class="w"><i id="cuenta">0</i></span></div>
+      <p class="sub" style="--bs:.7s">adultos mayores <span class="acento">viven solos</span> en Argentina</p>
+      <p class="fuente">Censo INDEC</p>
+    </div>
+  </section>
+  <!-- 3 -->
+  <section class="escena" id="e3">
+    <div class="bloque" style="width:1080px">
+      <div class="titulo" style="font-size:132px"><span class="w"><i>Una</i></span> <span class="w"><i>caída.</i></span><br><span class="w"><i class="acento">Nadie</i></span> <span class="w"><i class="acento">se</i></span> <span class="w"><i class="acento">entera.</i></span></div>
+      <p class="sub" style="--bs:1.5s">Y cada minuto en el piso cuenta.</p>
+    </div>
+    <div class="piso"></div>
+  </section>
+  <!-- 4 -->
+  <section class="escena" id="e4">
+    <div class="bloque" style="width:900px">
+      <div class="titulo"><span class="w"><i class="marca"><b>Vita</b>Link</i></span><br><span class="w"><i>se</i></span> <span class="w"><i>da</i></span> <span class="w"><i>cuenta.</i></span></div>
+      <p class="sub">Detecta la caída sola, en segundos.</p>
+    </div>
+    <div class="piso"></div>
+  </section>
+  <!-- 5 -->
+  <section class="escena" id="e5">
+    <div class="bloque" style="width:860px">
+      <div class="titulo"><span class="w"><i>Y</i></span> <span class="w"><i>avisa</i></span><br><span class="w"><i>a</i></span> <span class="w"><i>tu</i></span> <span class="w"><i class="acento">familia.</i></span></div>
+      <p class="sub">Con su ubicación, al instante.</p>
+    </div>
+  </section>
+  <!-- 6 -->
+  <section class="escena" id="e6">
+    <div class="bloque" style="width:880px">
+      <div class="titulo"><span class="w"><i>Tres</i></span> <span class="w"><i>toques</i></span><br><span class="w"><i class="acento">piden</i></span> <span class="w"><i class="acento">ayuda.</i></span></div>
+      <p class="sub">Sin pantallas. Sin menús. Sin complicaciones.</p>
+      <div class="toques" id="toques"><i>1</i><i>2</i><i>3</i></div>
+    </div>
+  </section>
+  <!-- 7 -->
+  <section class="escena" id="e7">
+    <div class="bloque" style="width:900px">
+      <div class="titulo"><span class="w"><i>Se</i></span> <span class="w"><i>carga</i></span><br><span class="w"><i class="acento">sin</i></span> <span class="w"><i class="acento">sacártela.</i></span></div>
+      <p class="sub" style="--bs:1.6s">El cargador se apoya encima: nunca queda desprotegida.</p>
+    </div>
+  </section>
+  <!-- 8 -->
+  <section class="escena" id="e8">
+    <div class="bloque">
+      <p class="chico sub" style="--bs:.2s;margin:0 0 26px">Proyecto integrador · 7.° B Electrónica · ITS Villada</p>
+      <div class="titulo sans" style="font-size:180px"><span class="w"><i class="marca"><b>Vita</b>Link</i></span></div>
+      <p class="sub" style="font-family:var(--serif);font-style:italic;font-size:54px;white-space:nowrap">Cuidado inteligente para quienes más <span class="acento">querés</span></p>
+      <p class="sub" style="--bs:1.6s;font-size:26px;color:#8b8d99;margin-top:44px">Franco Castillo · Valentín Cerri · Francisco Salatín · Santiago Virgolini</p>
+    </div>
+  </section>
+
+  <!-- 9 · pulso -->
+  <section class="escena" id="e9">
+    <div class="bloque" style="width:820px">
+      <div class="titulo"><span class="w"><i>Y</i></span> <span class="w"><i>mide</i></span><br><span class="w"><i>tu</i></span> <span class="w"><i class="acento">pulso.</i></span></div>
+      <p class="sub">Pulso y oxígeno, en vivo para tu familia.</p>
+    </div>
+    <div class="vitales">
+      <div class="vital"><svg class="corazon" viewBox="0 0 24 24"><path d="M19.5 12.6 12 20l-7.5-7.4A5 5 0 1 1 12 6a5 5 0 1 1 7.5 6.6Z"/></svg><b id="vBpm">72</b><span>LPM</span></div>
+      <div class="vital"><svg class="gota" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg><b>98</b><span>% oxígeno</span></div>
+    </div>
+    <svg class="ecg-grande" viewBox="0 0 1920 240" preserveAspectRatio="none"><path d="M0 120H300l30-50 40 130 40-170 30 100 25-20H760l30-50 40 130 40-170 30 100 25-20H1220l30-50 40 130 40-170 30 100 25-20H1920"/></svg>
+  </section>
+
+  <div id="barrido"></div>
+  <div id="destello"></div>
+  <svg id="latido" viewBox="0 0 1920 1080" preserveAspectRatio="none"><path d="M-40 540H720l40-90 50 220 50-260 40 170 30-40H1960"/></svg>
+  <div id="barras"></div>
+  <div id="modo">MANUAL · <kbd>R</kbd> vuelve al automático</div>
+  <div class="firma"><b>VitaLink</b> · ITS Villada</div>
+  <div id="negro"></div>
+</main>
+
+<script src="js/three.min.js"></script>
+<script src="js/carcasa.js"></script>
+<script src="js/pulsera3d.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = $('escenario'), P3 = window.Pulsera3D;
+  var TEMAS = { rojo: 0xe5484d, verde: 0x3ecf5c, azul: 0x3b9cff };
+
+  // espesor del celular
+  var cel = $('cel');
+  for (var z = -6; z < 7; z++) { var l = document.createElement('div'); l.className = 'capa'; l.style.transform = 'translateZ(' + z + 'px)'; cel.prepend(l); }
+
+  function ajustar() {
+    var s = Math.min(innerWidth / 1920, innerHeight / 1080);
+    esc.style.transform = 'translate(' + ((innerWidth - 1920 * s) / 2) + 'px,' + ((innerHeight - 1080 * s) / 2) + 'px) scale(' + s + ')';
+    if (P3) P3.resolucion(s);
+  }
+  addEventListener('resize', ajustar); ajustar();
+
+  // índice de cada palabra para la cascada
+  [].forEach.call(document.querySelectorAll('.escena'), function (e) {
+    [].forEach.call(e.querySelectorAll('.w'), function (w, k) { w.style.setProperty('--k', k); });
+  });
+
+  // ---------- utilidades ----------
+  var timers = [], rafs = [];
+  function luego(ms, fn) { timers.push(setTimeout(fn, ms)); }
+  function pose(txt) {
+    var p = txt.trim().split(/\s+/).map(Number);
+    P3.pose({ x: p[0], y: p[1], rx: p[2], ry: p[3], rz: p[4], s: p[5], o: p[6], ex: p[7] || 0, correa: p[8] === undefined ? 1 : p[8], cargador: 0, giro: p[9] || 0 });
+  }
+  function poseCel(txt) {
+    var p = txt.trim().split(/\s+/).map(Number), el = $('poseCel');
+    el.style.transform = 'translate(' + p[0] + 'px,' + p[1] + 'px) rotateX(' + p[2] + 'deg) rotateY(' + p[3] + 'deg) rotateZ(' + p[4] + 'deg) scale(' + p[5] + ')';
+    el.style.opacity = p[6];
+  }
+  function tema(t) { document.body.classList.toggle('t-verde', t === 'verde'); document.body.classList.toggle('t-azul', t === 'azul'); P3.setColorTema(TEMAS[t]); }
+  // deja una escena oculta y lista para entrar de nuevo, sin que sus textos crucen la pantalla
+  function reposar(el) {
+    el.classList.add('quieta'); el.classList.remove('sale', 'on'); void el.offsetWidth; el.classList.remove('quieta');
+  }
+  function reiniciarAnim(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
+  function ondas() { var c = P3.centroPantalla(), o = $('ondas'); o.style.left = c.x + 'px'; o.style.top = c.y + 'px'; reiniciarAnim(o, 'va'); }
+  function pantalla(n) { [].forEach.call($('pantalla').querySelectorAll('img'), function (im) { im.classList.toggle('on', im.dataset.p === n); }); }
+
+  // ---------- escenas (≈57 s): primero el problema, después la revelación ----------
+  function enEscena(id) { return ESCENAS[actual] && ESCENAS[actual].id === id; }
+  var ESCENAS = [
+    { id: 'e2', dur: 5500, tema: 'rojo', palabra: 'SOLOS', entrar: function () {
+        pose('700 600 -40 400 0 .5 0');
+        var el = $('cuenta'), fin = 1200000, t0 = performance.now() + 300;
+        (function paso() {
+          var p = Math.min(1, Math.max(0, (performance.now() - t0) / 1600));
+          el.textContent = Math.round(fin * (1 - Math.pow(1 - p, 3))).toLocaleString('es-AR');
+          if (p < 1 && enEscena('e2')) rafs.push(requestAnimationFrame(paso));
+        })();
+      } },
+    { id: 'e3', dur: 6000, tema: 'rojo', palabra: 'CAÍDA', trans: 'latido', entrar: function () {
+        // la pulsera cae y golpea contra el piso
+        var t0 = performance.now() + 800;
+        P3.fijar({ x: 480, y: -620, rx: -24, ry: -30, rz: 6, s: .95, o: 1, ex: 0, correa: 1 });
+        var golpe = false;
+        (function cuadro() {
+          if (!enEscena('e3')) return;
+          var t = (performance.now() - t0) / 1000, y = -620, rz = 6, rx = -24;
+          if (t > 0) {
+            var q = Math.min(1, t / 0.62); y = -620 + 840 * q * q; rz = 6 + 24 * q * q; rx = -24 - 36 * q;
+            if (q >= 1) {
+              var r = t - 0.62; y = 220 - Math.max(0, 40 * Math.sin(Math.PI * Math.min(1, r / 0.28)));
+              if (!golpe) { golpe = true; reiniciarAnim(esc, 'temblor'); reiniciarAnim($('destello'), 'va'); }
+            }
+          }
+          P3.fijar({ y: y, rz: rz, rx: rx });
+          rafs.push(requestAnimationFrame(cuadro));
+        })();
+      } },
+    { id: 'e1', dur: 7500, tema: 'rojo', palabra: 'VITALINK', oscuro: true, trans: 'latido', entrar: function () {
+        pose('0 30 -18 -12 4 1.3 1'); P3.armar();
+        luego(3000, function () { document.body.classList.remove('oscuro'); reiniciarAnim($('destello'), 'va'); ondas(); });
+        luego(3600, function () { pose('430 30 -26 -30 10 1.25 1'); });
+      } },
+    { id: 'e4', dur: 5500, tema: 'rojo', palabra: 'DETECTA', trans: 'barrido', entrar: function () {
+        // la pulsera se cae otra vez y ahora sí avisa
+        P3.fijar({ x: 480, y: -620, rx: -24, ry: -30, rz: 6, s: .95, o: 1, ex: 0, correa: 1 });
+        var t0 = performance.now() + 500, avisoHecho = false;
+        (function cuadro() {
+          if (!enEscena('e4')) return;
+          var t = (performance.now() - t0) / 1000, y = -620, rz = 6, rx = -24;
+          if (t > 0) { var q = Math.min(1, t / 0.62); y = -620 + 840 * q * q; rz = 6 + 24 * q * q; rx = -24 - 36 * q; }
+          if (t > 0.62) y = 220;
+          P3.fijar({ y: y, rz: rz, rx: rx });
+          if (t > 1.0 && !avisoHecho) { avisoHecho = true; P3.vibrar(); ondas(); luego(1900, function () { P3.vibrar(); ondas(); }); }
+          rafs.push(requestAnimationFrame(cuadro));
+        })();
+      } },
+    { id: 'e5', dur: 7000, tema: 'rojo', palabra: 'ALERTA', trans: 'barrido', entrar: function () {
+        pose('260 300 -30 -20 8 .6 1');
+        pantalla('panel'); $('noti').classList.remove('on');
+        poseCel('520 0 4 -16 2 1 1');
+        luego(1300, function () { $('noti').classList.add('on'); reiniciarAnim($('sacude'), 'va'); P3.vibrar(); });
+        luego(3000, function () { $('noti').classList.remove('on'); pantalla('caida'); });
+      }, salir: function () { poseCel('1250 60 0 -70 0 .8 0'); } },
+    { id: 'e6', dur: 6000, tema: 'verde', palabra: 'S.O.S.', trans: 'barrido', entrar: function () {
+        pose('420 40 -14 -10 2 1.55 1');
+        var bolas = [].slice.call($('toques').children);
+        $('toques').classList.remove('listo');
+        bolas.forEach(function (b) { b.classList.remove('on'); });
+        // tres toques en el pad: cada uno lo ilumina y suma uno
+        [1500, 2150, 2800].forEach(function (ms, k) {
+          luego(ms, function () { P3.brillo('sos', true); bolas[k].classList.add('on'); });
+          luego(ms + 280, function () { P3.brillo('sos', false); });
+        });
+        // al tercero: vibra y sale el aviso
+        luego(3150, function () { P3.brillo('sos', true); P3.vibrar(); ondas(); reiniciarAnim($('destello'), 'va'); $('toques').classList.add('listo'); });
+      }, salir: function () { P3.brillo('sos', false); } },
+    { id: 'e7', dur: 6500, tema: 'verde', palabra: 'CARGA', trans: 'latido', entrar: function () {
+        P3.pose({ x: 430, y: 60, rx: -56, ry: 0, rz: -20, s: 1.05, o: 1, ex: 0, correa: 1, cargador: 0, giro: 0 });
+        luego(900, function () { P3.pose({ x: 430, y: 60, rx: -56, ry: 0, rz: -20, s: 1.05, o: 1, ex: 0, correa: 1, cargador: 1, giro: 0 }); });
+        luego(2300, function () { reiniciarAnim($('destello'), 'va'); });
+      }, salir: function () { P3.pose({ x: 430, y: 60, rx: -56, ry: 0, rz: -20, s: 1.05, o: 1, ex: 0, correa: 1, cargador: 0, giro: 0 }); } },
+    { id: 'e9', dur: 5500, tema: 'rojo', palabra: 'PULSO', trans: 'barrido', entrar: function () {
+        pose('700 600 -40 400 0 .5 0');
+        var v = $('vBpm');
+        (function latir() { if (!enEscena('e9')) return; v.textContent = 70 + Math.floor(Math.random() * 6); luego(1100, latir); })();
+      } },
+    { id: 'e8', dur: 7500, tema: 'rojo', palabra: 'VITALINK', trans: 'latido', entrar: function () { pose('560 60 -24 -28 8 .95 1 0 1 10'); } }
+  ];
+  var TOTAL = ESCENAS.reduce(function (a, e) { return a + e.dur; }, 0);
+
+  // barras de progreso
+  var barras = $('barras');
+  ESCENAS.forEach(function () { barras.appendChild(document.createElement('i')); });
+  var barrasEls = [].slice.call(barras.children);
+
+  var actual = -1, inicioEscena = 0, auto = true;
+  function limpiar() { timers.forEach(clearTimeout); timers = []; rafs.forEach(cancelAnimationFrame); rafs = []; }
+  function ir(i) {
+    var antes = ESCENAS[actual];
+    limpiar();
+    if (antes) {
+      if (antes.salir) antes.salir();
+      if (antes.id === 'e1') P3.cancelarArmado();
+      var ea = $(antes.id); ea.classList.remove('on'); ea.classList.add('sale');
+      setTimeout(function () { if (!ea.classList.contains('on')) reposar(ea); }, 700);
+    }
+    actual = i; inicioEscena = performance.now();
+    var e = ESCENAS[i];
+    if (!e.oscuro) document.body.classList.remove('oscuro');
+    else { document.body.classList.add('oscuro'); P3.fijar({ o: 0 }); }
+    tema(e.tema);
+    if (antes) reiniciarAnim($(e.trans === 'barrido' ? 'barrido' : 'latido'), 'va');
+    // palabra gigante de fondo
+    var pal = $('palabra');
+    pal.classList.remove('on');
+    setTimeout(function () { if (actual !== i) return; pal.firstChild.textContent = e.palabra || ''; void pal.offsetWidth; pal.classList.add('on'); }, 350);
+    e.entrar();
+    setTimeout(function () {
+      if (actual !== i) return;
+      var el = $(e.id);
+      if (el.classList.contains('sale')) reposar(el);   // se volvió rápido a la misma escena
+      el.classList.add('on');
+    }, antes ? 300 : 0);
+    if (auto) timers.push(setTimeout(siguiente, e.dur));
+  }
+  function siguiente() {
+    if (actual < ESCENAS.length - 1) { ir(actual + 1); return; }
+    // fin del ciclo: fundido a negro y vuelta a empezar
+    $('negro').classList.add('on');
+    setTimeout(function () {
+      if (!auto) return;   // si alguien tomó el control con las flechas, no reiniciar el ciclo
+      reposar($(ESCENAS[actual].id));
+      P3.fijar({ o: 0 });
+      document.body.classList.add('oscuro');
+      actual = -1;
+      $('negro').classList.remove('on');
+      setTimeout(function () { if (auto) ir(0); }, 700);
+    }, 1000);
+  }
+  // barras animadas
+  (function progreso() {
+    requestAnimationFrame(progreso);
+    barrasEls.forEach(function (b, k) {
+      var p = k < actual ? 1 : k > actual ? 0 : (!auto ? 1 : Math.min(1, (performance.now() - inicioEscena) / ESCENAS[actual].dur));
+      b.style.setProperty('--p', p);
+    });
+  })();
+
+  // clic o F: pantalla completa
+  function pantallaCompleta() { if (!document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); }
+  addEventListener('click', pantallaCompleta);
+  var N = ESCENAS.length;
+  function manual(i) {
+    auto = false; $('modo').classList.add('on'); $('negro').classList.remove('on');
+    ir((i + N) % N);
+  }
+  addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'f' || k === 'F') pantallaCompleta();
+    else if (k === 'ArrowRight' || k === 'ArrowDown' || k === ' ' || k === 'PageDown') { e.preventDefault(); manual(actual + 1); }
+    else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp') { e.preventDefault(); manual(actual - 1); }
+    else if (k === 'r' || k === 'R') {
+      // vuelve al automático desde la escena actual
+      auto = true; $('modo').classList.remove('on');
+      ir(actual < 0 ? 0 : actual);
+    }
+  });
+
+  // index.html#4 arranca en esa escena (en manual), útil para ensayar
+  var inicio = parseInt(location.hash.slice(1), 10);
+  Promise.race([document.fonts.ready, new Promise(function (r) { setTimeout(r, 1500); })]).then(function () {
+    setTimeout(function () {
+      if (actual !== -1) return;
+      if (inicio >= 1 && inicio <= N) manual(inicio - 1); else ir(0);
+    }, 600);
+  });
+  window.__exhibicion = { ir: function (i) { ir(i); } };
+})();
+</script>
+</body>
+</html>
