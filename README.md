@@ -28,8 +28,9 @@
 6. [Aplicación móvil](#-aplicación-móvil)
 7. [Estructura del repositorio](#-estructura-del-repositorio)
 8. [Cómo compilar y usar](#-cómo-compilar-y-usar)
-9. [Limitaciones y próximos pasos](#-limitaciones-y-próximos-pasos)
-10. [Equipo](#-equipo)
+9. [Presentaciones](#-presentaciones)
+10. [Limitaciones y próximos pasos](#-limitaciones-y-próximos-pasos)
+11. [Equipo](#-equipo)
 
 ---
 
@@ -37,9 +38,9 @@
 
 VitaLink es un **ecosistema** formado por una pulsera y una aplicación móvil:
 
-- La **pulsera** detecta caídas por sí sola, mide el pulso y el oxígeno en sangre, y tiene una zona táctil de **S.O.S.** para pedir ayuda con un toque. No tiene pantallas ni menús: no hay nada que configurar.
+- La **pulsera** detecta caídas por sí sola, mide el pulso y el oxígeno en sangre, y tiene una zona táctil de **S.O.S.** para pedir ayuda con tres toques. No tiene pantallas ni menús: no hay nada que configurar.
 - El **celular del paciente** hace de puente: recibe los datos por Bluetooth Low Energy y los sube a la nube junto con la ubicación GPS.
-- La **familia** recibe la alerta al instante en su celular, con la ubicación exacta y los signos vitales en vivo.
+- La **familia** recibe la alerta al instante en su celular, con la ubicación y los signos vitales en vivo.
 
 Usar el celular como puente permite que la pulsera sea **chica (30 × 40 mm), económica y de bajo consumo**.
 
@@ -88,11 +89,11 @@ flowchart LR
 | Componente | Función | Conexión |
 |---|---|---|
 | **Seeed Studio XIAO ESP32-S3** | Microcontrolador de 2 núcleos con Bluetooth 5 (BLE) y cargador de batería LiPo | — |
-| **MPU6050 (GY-521)** | Acelerómetro para detectar caídas (±8 g, 50 muestras/s, giroscopio apagado) | I²C · INT → `D0` |
+| **MPU6050 (GY-521)** | Acelerómetro para detectar caídas (±8 g, 50 muestras/s, giroscopio apagado). Vigila solo la caída libre y despierta al ESP32 | I²C · INT → `D0` |
 | **MAX30102** | Sensor óptico de pulso (BPM) y oxígeno en sangre (SpO₂) | I²C · INT → `D1` |
 | **Pad táctil S.O.S.** | Pedir ayuda (3 toques) y despertar la pulsera | `D9` (táctil capacitivo) |
 | **Pad táctil Cancelar** | Cancelar una alerta | `D10` (táctil capacitivo) |
-| **Motor vibrador** | Avisos hápticos (toques, S.O.S., alarma) | `D6` |
+| **Motor vibrador** | Avisos hápticos (toques, S.O.S., alarma, carga) | `D6` (GPIO43) |
 | **Batería LiPo** | Alimentación, medida con divisor resistivo al ADC | ADC |
 | **Pads de carga** | GND y 5 V para el cargador magnético | — |
 
@@ -114,7 +115,7 @@ Diseñada en **Altium Designer**, de doble faz, con componentes SMD.
 Modelados en **Fusion 360** e impresos en 3D (archivos en `Diseño 3d/`):
 
 - **Pulsera:** base con ventana óptica para el sensor de pulso y anclajes de la correa, y tapa con las chapas metálicas (zonas táctiles S.O.S. y Cancelar, y pads de carga).
-- **Cargador magnético:** dos piezas que se apoyan **sobre** la pulsera. Sus pogo pins tocan los pads de carga, así el adulto **no tiene que sacarse la pulsera para cargarla** y nunca queda desprotegido.
+- **Cargador magnético:** dos piezas que se apoyan **sobre** la pulsera. Sus pogo pins tocan los pads de carga, así el adulto **no tiene que sacarse la pulsera para cargarla** y nunca queda desprotegido: con el cargador puesto puede seguir pidiendo ayuda y cancelando alertas.
 
 | Cara con las chapas | Por dentro | Con el cargador |
 | :---: | :---: | :---: |
@@ -133,9 +134,9 @@ Escrito en **C++** con **PlatformIO** (framework Arduino) sobre **FreeRTOS**. C�
 
 | Tarea | Núcleo | Qué hace |
 |---|:---:|---|
-| `TaskBLE` | 0 | Servidor Bluetooth, batería, comandos de la app, OTA y sueño profundo |
+| `TaskBLE` | 0 | Servidor Bluetooth, batería y carga, ritmo de la conexión, comandos de la app, OTA y sueño profundo |
 | `TaskMAX30102` | 1 | Detección de muñeca y medición de pulso y oxígeno |
-| `TaskMPU6050` | 1 | Detección de caídas a 50 Hz por interrupción |
+| `TaskMPU6050` | 1 | Espera la interrupción de caída libre del MPU y mide a 50 Hz para confirmar la caída |
 | `TaskMotor` | — | Patrones de vibración |
 | `TaskTactil` | 0 | Lectura de los pads S.O.S. y Cancelar |
 
@@ -152,6 +153,8 @@ Algoritmo en 3 pasos con parámetros **configurables desde la app** y guardados 
 | **2. Impacto** | Más de **7,7 g**, entre **400 y 750 ms** después de empezar la caída libre (más rápido es un gesto del brazo) |
 | **3. Confirmación** | Se ignoran 500 ms de rebotes y la persona tiene que quedar **quieta el 95 %** del tiempo hasta completar **2 s** desde el impacto |
 
+- **El MPU vigila solo:** en reposo el ESP32 no lee el acelerómetro. El MPU6050 queda programado con su detección de **caída libre por hardware** y, cuando la gravedad baja del umbral, levanta el pin **INT (`D0`)**. Recién ahí el ESP32 mide a 50 Hz y confirma los pasos 2 y 3. Si en 3,5 s no hubo caída, el MPU vuelve a vigilar solo.
+- Si el chip no es un MPU6050 original (por ejemplo, un MPU6500 que no tiene caída libre), la pulsera mide de forma continua como antes.
 - **Solo se detectan caídas** con el celular conectado y la pulsera puesta, para evitar falsas alarmas si se cae de la mesa.
 - Si el sensor de pulso no responde, se detecta igual.
 - **Modo calibración:** la app muestra la aceleración en vivo y los eventos de cada prueba, sin disparar alertas reales.
@@ -170,7 +173,7 @@ Algoritmo en 3 pasos con parámetros **configurables desde la app** y guardados 
 | **3 toques** en S.O.S. | Envía un pedido de ayuda. Si no hay celular, queda pendiente hasta 5 min y se envía al reconectar |
 | **1 toque** en Cancelar | Cancela la alerta en curso (en la pulsera y en la app) |
 | **Mantener los dos pads 5 s** y soltar | Reinicia la pulsera |
-| **Apoyar el cargador** | Se detecta y los pads se recalibran solos, sin vibrar |
+| **Apoyar el cargador** | Los pads se recalibran solos y, cuando la pulsera detecta que está cargando, vibra para avisarlo |
 
 | Vibración | Significado |
 |---|---|
@@ -178,21 +181,30 @@ Algoritmo en 3 pasos con parámetros **configurables desde la app** y guardados 
 | Pulso largo (1,5 s) | S.O.S. enviado |
 | 2 pulsos medios | S.O.S. sin celular |
 | 3 pulsos cortos | Alerta cancelada |
+| 3 pulsos que van creciendo | Empezó a cargar |
 | Pulsos continuos | Alerta en curso, se espacian cuando un familiar la vio |
+
+El motor está en `D6`, que en la XIAO es el pin TX del puerto serie (GPIO43). Para que no vibre cada vez que la pulsera se despierta, el pin queda **trabado en bajo** durante el sueño profundo y el arranque.
+
+### Batería y carga
+
+- La batería se lee **cada 1 s** y se envía a la app cada 5 s como `porcentaje;cargando`.
+- **Detección de carga solo con la tensión de la batería:** un salto sostenido de más de 40 mV, o una subida lenta y constante durante 2 minutos, indica que está cargando. Una caída de la tensión indica que se desenchufó.
+- La app muestra un indicador de **"Cargando"** en la batería, y el aviso de batería baja no aparece mientras carga.
 
 ### Ahorro de energía
 
 - **Procesador:** CPU a **80 MHz** (240 MHz solo durante la actualización OTA).
-- **Radio:** potencia BLE de **+6 dBm** e intervalo de conexión de 50–100 ms con latencia 3.
+- **Radio:** potencia BLE de **+6 dBm**. En reposo pide un intervalo de conexión de **400–500 ms**; con una alerta, una calibración o recién conectada vuelve a **50–100 ms**.
 - **Sin celular:** anuncio rápido el primer minuto y después lento.
-- **Sensores:** giroscopio apagado de forma permanente, y acelerómetro y sensor de pulso dormidos cuando no se usan.
+- **Sensores:** giroscopio apagado de forma permanente. El acelerómetro vigila la caída libre por su cuenta, así el ESP32 no lo lee en reposo, y el sensor de pulso duerme cuando no se usa.
 - **Sueño profundo:** después de **5 min sin celular** la pulsera duerme. Se despierta cada 45 s para anunciarse, o al instante con un toque en **S.O.S.**
 
 ### Bluetooth (servicio `4fafc201-…`)
 
 | Característica | Termina en | Uso |
 |---|:---:|---|
-| BPM / SpO₂ / Batería | `…26a8` `…26a9` `…26aa` | Signos vitales (notify) |
+| BPM / SpO₂ / Batería | `…26a8` `…26a9` `…26aa` | Signos vitales (notify). La batería va como `porcentaje;cargando` |
 | Caída | `…26ab` | Alerta de caída. La app escribe `V` (visto), `X` (cancelada), `R` (reiniciar) |
 | S.O.S. | `…26ac` | Pedido de ayuda |
 | OTA | `…26ad` `…26ae` `…26af` | Versión, control y datos de la actualización |
@@ -217,7 +229,7 @@ Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Clou
 ### Modo Paciente
 
 - Conexión y **reconexión automática** con la pulsera, que sigue funcionando con la pantalla apagada.
-- Pulso, oxígeno y batería en vivo, con el estado del sensor ("midiendo", "sin muñeca", "pausa").
+- Pulso, oxígeno y batería en vivo, con el estado del sensor ("midiendo", "sin muñeca", "pausa") y un indicador de **carga**.
 - Comparte la **ubicación GPS** con la familia y avisa si falta el permiso o el GPS está apagado.
 - **Pantalla de emergencia** a pantalla completa ante una caída o S.O.S., indicando qué familiares ya la vieron.
 - **Ajustes:** calibrar la detección de caídas y el sensor de pulso, actualizar el firmware (OTA), reiniciar la pulsera y editar el perfil.
@@ -252,6 +264,7 @@ Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Clou
 ├── Hardware/MainBoard_VitaLink/  # Proyecto de Altium, esquemático (PDF) y Gerbers
 ├── Diseño 3d/                    # Carcasa y cargador: vitalink_case (.f3d, .step, .stl)
 ├── capturas/                     # Capturas de la aplicación
+├── Presentaciones/               # Presentaciones del proyecto (se abren en el navegador)
 ├── Assets/                       # Imágenes y renders del README
 ├── Informe Proyecto.md           # Evolución del proyecto, decisiones y consideraciones
 └── feedback.md                   # Notas de las reuniones de seguimiento
@@ -297,6 +310,20 @@ cd android && ./gradlew assembleRelease   # APK de release
 
 ---
 
+## 🎬 Presentaciones
+
+En [`Presentaciones/`](Presentaciones) hay tres presentaciones hechas como páginas web, con la pulsera en 3D y capturas reales de la app:
+
+| Presentación | Para qué |
+|---|---|
+| **Exposición técnica** | La exposición completa: problema, hardware, firmware, app, ventajas y limitaciones |
+| **Exhibición** | Corre sola en loop, pensada para dejarla en una pantalla durante la muestra |
+| **Público general** | Más corta y orientada al producto, para gente sin conocimientos técnicos |
+
+Para verlas hay que abrir el archivo **`index.html`** de cada carpeta en un navegador. Los detalles y los controles están en el [README de Presentaciones](Presentaciones/README.md).
+
+---
+
 ## 🚧 Limitaciones y próximos pasos
 
 **Limitaciones actuales**
@@ -305,7 +332,6 @@ cd android && ./gradlew assembleRelease   # APK de release
 - Necesita el celular del paciente cerca para avisar.
 - Una caída muy lenta (por ejemplo, deslizarse de una silla) puede no tener caída libre: para eso está el botón S.O.S.
 - El pulso y el oxígeno se **monitorean** en la app, pero todavía no generan alertas automáticas.
-- Con el cargador puesto, el cargador replica la zona S.O.S. pero todavía no la de **Cancelar**.
 
 **Próximos pasos**
 
