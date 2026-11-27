@@ -8,6 +8,7 @@
 #include <esp_task_wdt.h>
 #include <Preferences.h>
 #include <esp_sleep.h>
+#include <driver/gpio.h>
 
 #define TIEMPO_MEDICION_MAX_MS  30000   // 30 segundos midiendo BPM y SpO2
 #define TIEMPO_DESCANSO_MAX_MS  15000   // 15 segundos de pausa entre mediciones
@@ -69,7 +70,7 @@
 #define TACTIL_GUARDAR_CADA_MS    (10UL * 60UL * 1000UL)  // Como mucho cada 10 min (cuida la flash)
 #define TACTIL_CAMBIO_MIN         0.05f                  // Solo se guarda si cambio mas de 5%
 
-const char* VERSION_FIRMWARE = "1.0.45";
+const char* VERSION_FIRMWARE = "1.0.46";
 const bool SENSAR_BATERIA = true;       // Cambiar a false para deshabilitar el sensado de bateria
 
 SemaphoreHandle_t i2cMutex;
@@ -94,6 +95,10 @@ static void entrarEnSuenoProfundo() {
         xSemaphoreGive(i2cMutex);
     }
     digitalWrite(PIN_MOTOR, LOW);
+    // El motor esta en GPIO43 (TX del puerto serie): al arrancar, el chip manda texto por ese pin
+    // y el motor vibraba en cada despertar. Se traba el pin en bajo durante el sueño y el arranque.
+    gpio_hold_en((gpio_num_t)PIN_MOTOR);
+    gpio_deep_sleep_hold_en();
     // El pad S.O.S. despierta la pulsera
     if (baseTactilSOS > 0) {
         touchSleepWakeUpEnable(PIN_TACTIL_SOS, (touch_value_t)(baseTactilSOS * (UMBRAL_TACTIL_TOQUE - 1.0f)));
@@ -620,6 +625,11 @@ void TaskTactil(void *pvParameters) {
 }
 
 void setup() {
+    // Lo primero: motor apagado y liberar el pin que quedo trabado durante el sueño
+    pinMode(PIN_MOTOR, OUTPUT);
+    digitalWrite(PIN_MOTOR, LOW);
+    gpio_hold_dis((gpio_num_t)PIN_MOTOR);
+
     // Reducir frecuencia del procesador de 240MHz a 80MHz para ahorrar bateria
     setCpuFrequencyMhz(80);
 
@@ -651,10 +661,6 @@ void setup() {
 
     // Inicializar servidor Bluetooth y servicio OTA
     inicializarBLE();
-
-    // Inicializar pin del motor vibrador
-    pinMode(PIN_MOTOR, OUTPUT);
-    digitalWrite(PIN_MOTOR, LOW);
 
     // Crear tareas en sus respectivos nucleos
     xTaskCreatePinnedToCore(TaskBLE, "TareaBLE", 6144, NULL, 1, NULL, 0); // mas pila: procesa los comandos de calibracion
