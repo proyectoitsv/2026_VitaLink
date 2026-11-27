@@ -111,14 +111,55 @@ static void enviarEstadoOTABLE(const char* estado) {
     }
 }
 
+// Intervalo de conexion segun lo que este pasando: lento en reposo, rapido con alertas o calibracion
+#define REPOSO_INTERVALO_MIN     320   // x1,25 ms = 400 ms
+#define REPOSO_INTERVALO_MAX     400   // x1,25 ms = 500 ms
+#define REPOSO_LATENCIA          2
+#define REPOSO_TIMEOUT           600   // x10 ms = 6 s (mas que 2 x 3 x 500 ms)
+#define ACTIVA_AL_CONECTAR_MS    20000UL   // la app descubre servicios y se suscribe
+#define ACTIVA_DESPUES_MS        10000UL   // sigue rapida un rato despues de una alerta o calibracion
+enum ModoConexion { CONEXION_SIN_PEDIR, CONEXION_ACTIVA, CONEXION_REPOSO };
+static ModoConexion modoConexion = CONEXION_SIN_PEDIR;
+static esp_bd_addr_t direccionCelular;
+static unsigned long ultimoMotivoActiva = 0;
+
+static void pedirModoConexion(ModoConexion modo) {
+    if (modo == modoConexion || pServer == NULL) return;
+    if (modo == CONEXION_ACTIVA) {
+        pServer->updateConnParams(direccionCelular, CONEXION_INTERVALO_MIN, CONEXION_INTERVALO_MAX,
+                                  CONEXION_LATENCIA, CONEXION_TIMEOUT);
+    } else {
+        pServer->updateConnParams(direccionCelular, REPOSO_INTERVALO_MIN, REPOSO_INTERVALO_MAX,
+                                  REPOSO_LATENCIA, REPOSO_TIMEOUT);
+    }
+    modoConexion = modo;
+}
+
+static void actualizarModoConexion() {
+    if (!dispositivoConectado) return;
+    // Durante la OTA la app pide prioridad alta: no pisarla
+    if (estaActualizandoOTA()) {
+        modoConexion = CONEXION_SIN_PEDIR;
+        return;
+    }
+    unsigned long ahora = millis();
+    bool motivo = hayAvisoActivo() || enModoCalibracion() || enCalibracionMAX();
+    if (motivo) ultimoMotivoActiva = ahora;
+    bool activa = motivo || ahora - instanteConexionBLE < ACTIVA_AL_CONECTAR_MS ||
+                  (ultimoMotivoActiva != 0 && ahora - ultimoMotivoActiva < ACTIVA_DESPUES_MS);
+    pedirModoConexion(activa ? CONEXION_ACTIVA : CONEXION_REPOSO);
+}
+
 class MisCallbacksServidor: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t *param) {
         instanteConexionBLE = millis();
         versionInicialEnviadaBLE = false;
         dispositivoConectado = true;
-        // Pedir un intervalo de conexion que gaste menos bateria (el celular puede ajustarlo)
-        pServer->updateConnParams(param->connect.remote_bda, CONEXION_INTERVALO_MIN, CONEXION_INTERVALO_MAX,
-                                  CONEXION_LATENCIA, CONEXION_TIMEOUT);
+        // Al conectar, intervalo normal; despues de un rato sin nada pasa a reposo
+        memcpy(direccionCelular, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+        modoConexion = CONEXION_SIN_PEDIR;
+        ultimoMotivoActiva = 0;
+        pedirModoConexion(CONEXION_ACTIVA);
         if (pCharOTAVersion != NULL) {
             pCharOTAVersion->setValue((uint8_t*)VERSION_FIRMWARE, strlen(VERSION_FIRMWARE));
         }
@@ -131,6 +172,7 @@ class MisCallbacksServidor: public BLEServerCallbacks {
         activarCalibracionMAX(false);
         dispositivoConectado = false;
         dispositivoDesconectandose = true;
+        modoConexion = CONEXION_SIN_PEDIR;
         if (estaActualizandoOTA()) {
             cancelarActualizacionOTA();
             BLEDevice::setPower(POTENCIA_BLE_NORMAL);
@@ -261,6 +303,7 @@ static void procesarComandoMax(char* cmd) {
 
 // Se llama desde TaskBLE: procesa los comandos de calibracion pendientes
 void procesarComandosBLE() {
+    actualizarModoConexion();
     if (colaComandosCalib == NULL) return;
     char cmd[LARGO_COMANDO_CALIB];
     while (xQueueReceive(colaComandosCalib, cmd, 0) == pdTRUE) {

@@ -69,7 +69,7 @@
 #define TACTIL_GUARDAR_CADA_MS    (10UL * 60UL * 1000UL)  // Como mucho cada 10 min (cuida la flash)
 #define TACTIL_CAMBIO_MIN         0.05f                  // Solo se guarda si cambio mas de 5%
 
-const char* VERSION_FIRMWARE = "1.0.44";
+const char* VERSION_FIRMWARE = "1.0.45";
 const bool SENSAR_BATERIA = true;       // Cambiar a false para deshabilitar el sensado de bateria
 
 SemaphoreHandle_t i2cMutex;
