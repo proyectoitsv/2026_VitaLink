@@ -1,6 +1,6 @@
 <div align="center">
 
-# 💓 VitaLink
+# VitaLink
 
 **Pulsera inteligente que detecta caídas y avisa a la familia, pensada para adultos mayores que viven solos.**
 
@@ -18,23 +18,23 @@
 
 ---
 
-## 📑 Contenido
+## Contenido
 
-1. [¿Qué es VitaLink?](#-qué-es-vitalink)
-2. [El problema](#-el-problema)
-3. [Cómo funciona](#-cómo-funciona)
-4. [Hardware](#-hardware)
-5. [Firmware](#-firmware)
-6. [Aplicación móvil](#-aplicación-móvil)
-7. [Estructura del repositorio](#-estructura-del-repositorio)
-8. [Cómo compilar y usar](#-cómo-compilar-y-usar)
-9. [Presentaciones](#-presentaciones)
-10. [Limitaciones y próximos pasos](#-limitaciones-y-próximos-pasos)
-11. [Equipo](#-equipo)
+1. [¿Qué es VitaLink?](#qué-es-vitalink)
+2. [El problema](#el-problema)
+3. [Cómo funciona](#cómo-funciona)
+4. [Hardware](#hardware)
+5. [Firmware](#firmware)
+6. [Aplicación móvil](#aplicación-móvil)
+7. [Estructura del repositorio](#estructura-del-repositorio)
+8. [Cómo compilar y usar](#cómo-compilar-y-usar)
+9. [Presentaciones](#presentaciones)
+10. [Limitaciones y próximos pasos](#limitaciones-y-próximos-pasos)
+11. [Equipo](#equipo)
 
 ---
 
-## 💡 ¿Qué es VitaLink?
+## ¿Qué es VitaLink?
 
 VitaLink es un **ecosistema** formado por una pulsera y una aplicación móvil:
 
@@ -46,7 +46,7 @@ Usar el celular como puente permite que la pulsera sea **chica (30 × 40 mm), ec
 
 ---
 
-## 📊 El problema
+## El problema
 
 | | |
 |---|---|
@@ -59,13 +59,13 @@ Después de una caída, **el tiempo en el piso** es lo que más importa: horas s
 
 ---
 
-## 🔄 Cómo funciona
+## Cómo funciona
 
 ```mermaid
 flowchart LR
-    P["⌚ Pulsera<br/>MPU6050 · MAX30102<br/>pads táctiles"] -- "Bluetooth LE" --> C["📱 App del paciente<br/>GPS + reconexión automática"]
-    C -- "Cloud Firestore" --> N["☁️ Firebase"]
-    N -- "Cloud Function + FCM" --> F["👨‍👩‍👧 App del familiar<br/>alerta a pantalla completa"]
+    P["Pulsera<br/>MPU6050 · MAX30102<br/>pads táctiles"] -- "Bluetooth LE" --> C["App del paciente<br/>GPS + reconexión automática"]
+    C -- "Cloud Firestore" --> N["Firebase"]
+    N -- "Cloud Function + FCM" --> F["App del familiar<br/>alerta a pantalla completa"]
     F -- "visto / cancelar" --> N
     N --> C
     C -- "V / X / R" --> P
@@ -82,7 +82,7 @@ flowchart LR
 
 ---
 
-## 🔧 Hardware
+## Hardware
 
 ### Componentes
 
@@ -126,7 +126,7 @@ Modelados en **Fusion 360** e impresos en 3D (archivos en `Diseño 3d/`):
 
 ---
 
-## 💻 Firmware
+## Firmware
 
 Escrito en **C++** con **PlatformIO** (framework Arduino) sobre **FreeRTOS**. Código en [`Firmware/VitaLink`](Firmware/VitaLink).
 
@@ -218,7 +218,7 @@ La pulsera se actualiza **por Bluetooth desde la app**. Al compilar, el script [
 
 ---
 
-## 📱 Aplicación móvil
+## Aplicación móvil
 
 Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Cloud Firestore en tiempo real, Cloud Messaging y Cloud Functions. El código está en [`software/VitaLink`](software/VitaLink) y las Cloud Functions en [`software/firebase-functions`](software/firebase-functions).
 
@@ -248,7 +248,7 @@ Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Clou
 
 ---
 
-## 🗂 Estructura del repositorio
+## Estructura del repositorio
 
 ```
 2026_VitaLink/
@@ -280,7 +280,7 @@ Hecha en **React Native (Expo)** con **Firebase**: autenticación anónima, Clou
 
 ---
 
-## 🛠 Cómo compilar y usar
+## Cómo compilar y usar
 
 ### Firmware
 
@@ -310,7 +310,7 @@ cd android && ./gradlew assembleRelease   # APK de release
 
 ---
 
-## 🎬 Presentaciones
+## Presentaciones
 
 En [`Presentaciones/`](Presentaciones) hay tres presentaciones hechas como páginas web, con la pulsera en 3D y capturas reales de la app:
 
@@ -324,7 +324,7 @@ Para verlas hay que abrir el archivo **`index.html`** de cada carpeta en un nave
 
 ---
 
-## 🚧 Limitaciones y próximos pasos
+## Limitaciones y próximos pasos
 
 **Limitaciones actuales**
 
@@ -335,13 +335,13 @@ Para verlas hay que abrir el archivo **`index.html`** de cada carpeta en un nave
 
 **Próximos pasos**
 
-- 🔬 **Miniaturizar la placa** e integrar los sensores directamente en la PCB.
-- ⌚ **Diseño más ergonómico** y resistente al agua.
-- 💊 **Recordatorios de medicación** con vibración.
+- **Miniaturizar la placa** e integrar los sensores directamente en la PCB.
+- **Diseño más ergonómico** y resistente al agua.
+- **Recordatorios de medicación** con vibración.
 
 ---
 
-## 👥 Equipo
+## Equipo
 
 **Grupo N.° 5 · 7.° año B · Electrónica**
 
@@ -353,9 +353,3 @@ Para verlas hay que abrir el archivo **`index.html`** de cada carpeta en un nave
 | Santiago Virgolini |
 
 **Instituto Técnico Salesiano Villada** · Córdoba, Argentina
-
-<div align="center">
-
-*VitaLink · Cuidado inteligente para quienes más querés* ❤️
-
-</div>
